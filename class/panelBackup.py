@@ -2108,6 +2108,8 @@ class backup:
     def check_disk_space(self,file_size,backup_dir):
         min_required_space = max(file_size* 5,  1* 1024 * 1024 * 1024)  # 1GB
         disk_usage = public.get_disk_usage(backup_dir)
+        if isinstance(disk_usage, dict) and "status" in disk_usage:
+            return
         if disk_usage.free < min_required_space:
             free_space_gb = int(min_required_space / (1024 * 1024 * 1024))
             self.send_disk_notification(free_space_gb)

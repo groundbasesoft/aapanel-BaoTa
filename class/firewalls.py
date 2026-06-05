@@ -114,26 +114,25 @@ class firewalls:
         if not self.CheckFirewallStatus(): return public.returnMsg(False,'当前系统防火墙未开启')
         import time
         import re
-        ip_format = get.port.split('/')[0]
-        if not public.check_ip(ip_format): return public.returnMsg(False,'FIREWALL_IP_FORMAT')
-        # if public.is_ipv6(ip_format): return public.returnMsg(False,'暂不支持屏蔽IPv6')
-        if ip_format in  ['0.0.0.0','127.0.0.0',"::1"]: return public.returnMsg(False,'请不要花样作死!')
-        address = get.port
+        address = get.port.split('/')[0]
+        if not public.check_ip(address): return public.returnMsg(False,'FIREWALL_IP_FORMAT')
+        if address in  ['0.0.0.0','127.0.0.0',"::1"]: return public.returnMsg(False,'请不要花样作死!')
         if public.M('firewall').where("port=?",(address,)).count() > 0: return public.returnMsg(False,'FIREWALL_IP_EXISTS')
         if self.__isUfw:
-            if public.is_ipv6(ip_format):
+            if public.is_ipv6(address):
                 public.ExecShell('ufw deny from ' + address + ' to any')
             else:
                 public.ExecShell('ufw insert 1 deny from ' + address + ' to any')
         else:
             if self.__isFirewalld:
                 #self.__Obj.AddDropAddress(address)
-                if public.is_ipv6(ip_format):
+                if public.is_ipv6(address):
                     public.ExecShell('firewall-cmd --permanent --add-rich-rule=\'rule family=ipv6 source address="'+ address +'" drop\'')
                 else:
+                    # return 'firewall-cmd --permanent --add-rich-rule=\'rule family=ipv6 source address="'+ address +'" drop\''
                     public.ExecShell('firewall-cmd --permanent --add-rich-rule=\'rule family=ipv4 source address="'+ address +'" drop\'')
             else:
-                if public.is_ipv6(ip_format): return public.returnMsg(False,'FIREWALL_IP_FORMAT')
+                if public.is_ipv6(address): return public.returnMsg(False,'FIREWALL_IP_FORMAT')
                 public.ExecShell('iptables -I INPUT -s '+address+' -j DROP')
 
         public.WriteLog("TYPE_FIREWALL", 'FIREWALL_DROP_IP',(address,))
@@ -146,16 +145,15 @@ class firewalls:
     #删除IP屏蔽
     def DelDropAddress(self,get):
         if not self.CheckFirewallStatus(): return public.returnMsg(False,'当前系统防火墙未开启')
-        address = get.port
         
         id = get.id
-        ip_format = get.port.split('/')[0]
-        if not public.check_ip(ip_format): return public.returnMsg(False,'FIREWALL_IP_FORMAT')
+        address = get.port.split('/')[0]
+        if not public.check_ip(address): return public.returnMsg(False,'FIREWALL_IP_FORMAT')
         if self.__isUfw:
             public.ExecShell('ufw delete deny from ' + address + ' to any')
         else:
             if self.__isFirewalld:
-                if public.is_ipv6(ip_format):
+                if public.is_ipv6(address):
                     public.ExecShell('firewall-cmd --permanent --remove-rich-rule=\'rule family=ipv6 source address="'+ address +'" drop\'')
                 else:
                     public.ExecShell('firewall-cmd --permanent --remove-rich-rule=\'rule family=ipv4 source address="'+ address +'" drop\'')

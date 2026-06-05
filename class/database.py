@@ -704,10 +704,10 @@ class database(datatool.datatools):
         if len(username.encode("utf-8")) > 16: 
             if os.path.exists("/www/server/mysql/version.pl"):
                 m_version = public.readFile(public.GetConfigValue('setup_path') + '/mysql/version.pl')
-                if '5.7' not in m_version and '8.0' not in m_version and '8.4' not in m_version and '9.0' not in m_version:
-                    return public.returnMsg(False, '数据库用户名不能超过16位,如需超过16位用户名请使用Mysql-5.7/8.0/8.4/9.0')
+                if '5.7' not in m_version and '8.0' not in m_version and '8.4' not in m_version and '9.0' not in m_version and '9.7' not in m_version:
+                    return public.returnMsg(False, '数据库用户名不能超过16位,如需超过16位用户名请使用Mysql-5.7/8.0/8.4/9.0/9.7')
             else:
-                return public.returnMsg(False, '数据库用户名不能超过16位,如需超过16位用户名请使用Mysql-5.7/8.0/8.4/9.0')
+                return public.returnMsg(False, '数据库用户名不能超过16位,如需超过16位用户名请使用Mysql-5.7/8.0/8.4/9.0/9.7')
         if not re.match(reg, data_name): return public.returnMsg(False, 'DATABASE_NAME_ERR_T')
         if not re.match(reg, username): return public.returnMsg(False, '用户名不能带特殊字符！')
         if not hasattr(get, 'db_user'): get.db_user = data_name
@@ -1280,7 +1280,7 @@ SetLink
                     admin_user = mysql_obj._USER
                     m_version = mysql_obj.query('select version();')[0][0]
 
-                if any(mysql_version in m_version for mysql_version in ['5.7', '8.0', '8.4', '9.0']):
+                if any(mysql_version in m_version for mysql_version in ['5.7', '8.0', '8.4', '9.0', '9.7']):
                     accept = self.map_to_list(mysql_obj.query("select Host from mysql.user where User='{}'".format(admin_user)))
                     for my_host in accept:
                         mysql_obj.execute("UPDATE mysql.user SET authentication_string='' WHERE User='{}' and Host='{}'".format(admin_user, my_host[0]))
@@ -1341,7 +1341,7 @@ SetLink
         if not user_result:
             return public.returnMsg(False, "数据库用户不存在，请同步此数据库后再重新设置密码！")
 
-        if any(mysql_version in m_version for mysql_version in ['5.7', '8.0', '8.4', '9.0']):
+        if any(mysql_version in m_version for mysql_version in ['5.7', '8.0', '8.4', '9.0', '9.7']):
             accept = self.map_to_list(mysql_obj.query("select Host from mysql.user where User='" + username + "' AND Host!='localhost'"))
             mysql_obj.execute("update mysql.user set authentication_string='' where User='" + username + "'")
             result = mysql_obj.execute("ALTER USER `%s`@`localhost` IDENTIFIED BY '%s'" % (username, newpassword))
@@ -1516,7 +1516,7 @@ SetLink
                 shell += " {table_shell} > '{backup_path}' ".format(table_shell=table_shell, backup_path=export_dir)
                 
                 if not table_list:
-                    tmp_tables = flag.set_name(db_name).query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='{}'".format(db_name))
+                    tmp_tables = flag.set_name(db_name).query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='{}' and TABLE_TYPE <> 'VIEW'".format(db_name))
                     table_list = []
                     for tmp_table in tmp_tables:
                         table_list.append(tmp_table[0])
@@ -1611,11 +1611,12 @@ SetLink
                     if import_p[0]:
                         data['backup_path'] = backup_path
                     else:
-                        public.ExecShell("echo '|-导入状态：成功' >> /tmp/import_sql.log")
-                        public.ExecShell("echo '|-导入结束时间：{} ' >> /tmp/import_sql.log".format(public.getDate()))
-                        public.ExecShell("echo '=====================================================' >> /tmp/import_sql.log")
-                        public.ExecShell("echo 'Database recovery successful!' >> /tmp/import_sql.log")
+                        public.ExecShell("echo '|-导出状态：成功' >> {}".format(log_path))
+                        public.ExecShell("echo '|-导出结束时间：{} ' >> {}".format(public.getDate(), log_path))
+                        public.ExecShell("echo '=====================================================' >> {}".format(log_path))
+                        public.ExecShell("echo 'Database recovery successful!' >> {}".format(log_path))
         return data
+
     def GetBackupSize(self,get):
         if not hasattr(get, "id"):
             return public.returnMsg(False, "缺少参数！id")
@@ -2427,6 +2428,12 @@ SetLink
 
     # 修改数据库端口
     def SetMySQLPort(self, get):
+        #判断端口是否合法
+        if not re.match(r"^[0-9]+$", get.port):
+            return public.returnMsg(False, '端口必须为数字！')
+        if int(get.port) < 1 or int(get.port) > 65535:
+            return public.returnMsg(False, '端口必须在1-65535之间！')
+        
         myfile = '/etc/my.cnf'
         mycnf = public.readFile(myfile)
         rep = r"port\s*=\s*([0-9]+)\s*\n"
@@ -2598,7 +2605,7 @@ SetLink
         result['mem']['query_cache_supprot'] = None
         try:
             m_version = public.readFile('/www/server/mysql/version.pl')
-            if any(mysql_v in m_version for mysql_v in ['5.7','8.0','8.4','9.0']):
+            if any(mysql_v in m_version for mysql_v in ['5.7','8.0','8.4','9.0','9.7']):
                 result['mem']['query_cache_supprot'] = "disable"
         except:
             result['mem']['query_cache_supprot'] = None
@@ -2627,7 +2634,7 @@ SetLink
             else:
                 mycnf = mycnf + "\n# {} = {}".format(v, get[k])
         for g in gets:
-            if any(mysql_v in m_version for mysql_v in ['5.7','8.0','8.4','9.0']) and g in ['query_cache_type', 'query_cache_size']:
+            if any(mysql_v in m_version for mysql_v in ['5.7','8.0','8.4','9.0','9.7']) and g in ['query_cache_type', 'query_cache_size']:
                 n += 1
                 continue
             if g == 'query_cache_supprot':
@@ -4209,10 +4216,10 @@ USE \`{db_name}\`;
         m_version = public.readFile(public.GetConfigValue('setup_path') + '/mysql/version.pl')
         data = self.map_to_list(panelMysql.panelMysql().query('show variables'))
 
-        if not any(mysql_version in m_version for mysql_version in ['5.7','8.0', '8.4', '9.0']):
+        if not any(mysql_version in m_version for mysql_version in ['5.7', '8.0', '8.4', '9.0', '9.7']):
             return public.ReturnMsg(False,"当时数据库版本不支持此功能，请使用Mysql-5.7/8.0/8.4")
 
-        if any(mysql_version in m_version for mysql_version in ['8.0', '8.4', '9.0']):
+        if any(mysql_version in m_version for mysql_version in ['8.0', '8.4', '9.0', '9.7']):
             key_name=['wait_timeout','interactive_timeout','default_password_lifetime','binlog_expire_logs_seconds']
         else:
             key_name=['wait_timeout','interactive_timeout','default_password_lifetime','expire_logs_days']
@@ -4237,7 +4244,7 @@ USE \`{db_name}\`;
         gets = ['wait_timeout', 'interactive_timeout', 'default_password_lifetime','expire_logs_days']
         
         for g in gets:
-            if any(mysql_version in m_version for mysql_version in ['8.0', '8.4', '9.0']) and g=="expire_logs_days": 
+            if any(mysql_version in m_version for mysql_version in ['8.0', '8.4', '9.0', '9.7']) and g=="expire_logs_days":
                 logs_seconds=int(int(get[g])*86400)
                 mysql_obj.execute("set global binlog_expire_logs_seconds={};".format(logs_seconds))
                 

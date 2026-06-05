@@ -1037,7 +1037,7 @@ class main(projectBase):
 
         # 启动脚本
         start_cmd = '''#!/bin/bash
-PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+PATH=/usr/local/btgo/bin:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin:$PATH
 export PATH
 cd {jar_path}
 {pre_sh}

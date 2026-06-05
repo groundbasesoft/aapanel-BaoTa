@@ -1,1 +1,0 @@
-import{c as t,aZ as n,e as s,m as p,aX as a,i as c}from"./base-lib.js?v=1776335489";function i(e){return typeof e=="function"||Object.prototype.toString.call(e)==="[object Object]"&&!c(e)}const m=t({name:"BtProgress",props:{...n},setup(e,{attrs:r,slots:o}){return()=>s(a,p(r,e),i(o)?o:{default:()=>[o]})}});export{m as _};

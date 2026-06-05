@@ -169,7 +169,7 @@ def TodoRead(**kwargs) -> str:
     session_id = kwargs.get("session_id") or kwargs.get("parent_session_id")
     sessions_dir = kwargs.get("sessions_dir", "sessions")
     if not session_id:
-        return _xml_response("error", "Session ID not found in context.")
+        return _xml_response("TodoRead", "error", "Session ID not found in context.")
         
     manager = TodoManager(session_id, sessions_dir=sessions_dir)
     todos = manager.get_todos()
@@ -185,7 +185,7 @@ def TodoRead(**kwargs) -> str:
     }
     
     # Return formatted string similar to other tools
-    return _xml_response("done", output['output'])
+    return _xml_response("TodoRead", "done", output['output'])
 
 @register_tool(category="Agent", name_cn="写入待办", risk_level="low")
 def TodoWrite(todos: List[Dict[str, Any]], merge: bool = False, summary: Optional[str] = None, **kwargs) -> str:
@@ -203,7 +203,7 @@ def TodoWrite(todos: List[Dict[str, Any]], merge: bool = False, summary: Optiona
     session_id = kwargs.get("session_id") or kwargs.get("parent_session_id")
     sessions_dir = kwargs.get("sessions_dir", "sessions")
     if not session_id:
-        return _xml_response("error", "Session ID not found in context.")
+        return _xml_response("TodoWrite", "error", "Session ID not found in context.")
         
     manager = TodoManager(session_id, sessions_dir=sessions_dir)
     updated_todos = manager.update_todos(todos, merge=merge)
@@ -220,4 +220,4 @@ def TodoWrite(todos: List[Dict[str, Any]], merge: bool = False, summary: Optiona
     
     result_str = output['output']
         
-    return _xml_response("done", result_str)
+    return _xml_response("TodoWrite", "done", result_str)

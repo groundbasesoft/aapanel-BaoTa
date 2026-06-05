@@ -1,1 +1,0 @@
-import{b as o,a as r,M as t}from"./utils-lib.js?v=1776335489";import{c as p,e}from"./base-lib.js?v=1776335489";const u=p({name:"BtTableRefresh",emits:["refresh"],setup(_,{emit:s}){const n=()=>{s("refresh"),t.success("刷新成功")};return()=>e(r,{onClick:n},{default:()=>[e(o,{icon:"el-refresh"},null)]})}});export{u as _};

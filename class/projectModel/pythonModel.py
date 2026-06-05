@@ -43,10 +43,17 @@ def _init_gvm() -> None:
             os.chmod(real_path, mode=0o755)
             os.symlink(real_path, pyvm_path)
 
-        if not os.path.exists(bt_py_project_env_path):
+        # if not os.path.exists(bt_py_project_env_path):
+        #     real_path = '{}/script/btpyprojectenv.sh'.format(panel_path)
+        #     os.chmod(real_path, mode=0o755)
+        #     os.symlink(real_path, bt_py_project_env_path)
+
+        if not os.path.exists(bt_py_project_env_path) or os.path.samefile(bt_py_project_env_path, '{}/script/btpyprojectenv.sh'.format(panel_path)):
             real_path = '{}/script/btpyprojectenv.sh'.format(panel_path)
-            os.chmod(real_path, mode=0o755)
-            os.symlink(real_path, bt_py_project_env_path)
+            run_path = "/www/server/python_project/btpyprojectenv.sh"
+            shutil.copyfile(real_path, run_path)
+            os.chmod(run_path, mode=0o755)
+            os.symlink(run_path, bt_py_project_env_path)
     except Exception:
         pass
 
@@ -1706,7 +1713,7 @@ echo $! > {pid_file}'''.format(
         if pyenv.env_type == "conda":
             public.writeFile("{}/{}.sh".format(self._activate_path, p_name), pyenv.activate_shell() + evn_sh)
         else:
-            return "unset _BT_PROJECT_ENV && source /www/server/panel/script/btpyprojectenv.sh {} {}".format(p_name, evn_sh)
+            return "unset _BT_PROJECT_ENV && source /www/server/python_project/btpyprojectenv.sh {} {}".format(p_name, evn_sh)
         return "source {}/{}.sh".format(self._activate_path, p_name)
 
 

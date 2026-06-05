@@ -372,7 +372,7 @@ class PushManager:
 
             push_data = {
                 "template_id": "1",
-                "task_id": ssl_task["task_id"],
+                "task_id": ssl_task["id"],
                 "task_data": {
                     "status": real_status ,
                     "task_data": {

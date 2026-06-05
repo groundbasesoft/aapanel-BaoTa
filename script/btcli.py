@@ -780,7 +780,7 @@ class DiskCleanManager:
                 },
                 "log": {
                     "name": "系统日志",
-                    "path": ["/var/log", "/var/spool"],
+                    "path": ["/var/log"],
                     "ext": [],
                     "exclude_ext": [],
                     "exclude_prefix": [],

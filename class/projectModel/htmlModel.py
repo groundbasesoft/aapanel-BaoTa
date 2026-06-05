@@ -602,7 +602,7 @@ set $bt_safe_open "{}/:/tmp/";'''.format(site_path)
         get.pid = sql.table('sites').add('name,path,status,ps,type_id,project_type,addtime',
                                          (site_name, site_path, '1', ps, get.type_id, "html", public.getDate()))
 
-        sql.table('domain').add('pid,name,port,addtime', (get.pid, main_domain, site_port, public.getDate()))
+        # sql.table('domain').add('pid,name,port,addtime', (get.pid, main_domain, site_port, public.getDate()))
         for d, p in domain_list:
             sql.table('domain').add('pid,name,port,addtime', (get.pid, d, p, public.getDate()))
 
@@ -641,6 +641,176 @@ set $bt_safe_open "{}/:/tmp/";'''.format(site_path)
         if os.path.exists(config_file):
             os.remove(config_file)
         return True
+
+    def _get_stop_path(self):
+        return "{}/stop".format(public.get_setup_path())
+
+    @staticmethod
+    def _get_request_name(get):
+        for name_attr in ("name", "project_name", "siteName", "site_name"):
+            if hasattr(get, name_attr):
+                name = getattr(get, name_attr)
+                if name:
+                    return str(name).strip()
+        return None
+
+    def _get_site_info(self, get):
+        site_id = getattr(get, "id", None)
+        if site_id:
+            try:
+                site_id = int(site_id)
+            except:
+                return None
+            site_info = public.M('sites').where("project_type=? AND id=?", ('html', site_id)).find()
+            return site_info if isinstance(site_info, dict) else None
+
+        site_name = self._get_request_name(get)
+        if not site_name:
+            return None
+        site_info = public.M('sites').where("project_type=? AND name=?", ('html', site_name)).find()
+        return site_info if isinstance(site_info, dict) else None
+
+    def _ensure_stop_index(self, stop_path):
+        if not os.path.exists(stop_path) or not os.path.isfile(stop_path + '/index.html'):
+            if not os.path.exists(stop_path):
+                os.makedirs(stop_path)
+            public.downloadFile('http://{}/stop.html'.format(public.get_url()), stop_path + '/index.html')
+
+        bt_stop = stop_path + '/bt-stop.html'
+        if not os.path.exists(bt_stop):
+            os.symlink(stop_path + '/index.html', bt_stop)
+        if not os.path.islink(bt_stop):
+            os.unlink(bt_stop)
+            os.symlink(stop_path + '/index.html', bt_stop)
+
+    def _get_html_run_path_from_config(self, site_info):
+        try:
+            project_config = json.loads(site_info.get("project_config") or "{}")
+        except:
+            project_config = {}
+        return project_config, project_config.get("html_run_path", "")
+
+    def _save_html_run_path(self, site_info, run_path):
+        project_config, _ = self._get_html_run_path_from_config(site_info)
+        if run_path and run_path != "/":
+            project_config["html_run_path"] = run_path
+        else:
+            project_config.pop("html_run_path", None)
+        public.M('sites').where("id=?", (site_info["id"],)).setField('project_config', json.dumps(project_config))
+
+    def _process_has_run_dir(self, website_name, website_path, stop_path):
+        conf = public.readFile('{}/nginx/html_{}.conf'.format(self._vhost_path, website_name))
+        if not conf:
+            return False
+        try:
+            really_path = re.search(r'root\s+(.*);', conf).group(1)
+            rel_path = really_path.replace(website_path + '/', '')
+            if rel_path == really_path:
+                return False
+            tmp = stop_path + '/' + rel_path
+            public.ExecShell('mkdir {t} && ln -s {s}/index.html {t}/index.html'.format(t=tmp, s=stop_path))
+        except:
+            pass
+
+    def SiteStop(self, get, multiple=None):
+        site_info = self._get_site_info(get)
+        if not site_info:
+            return public.returnMsg(False, 'SITE_NOT_EXISTS')
+        if str(site_info.get('status')) != '1':
+            return public.returnMsg(True, 'SITE_STOP_SUCCESS')
+
+        stop_path = self._get_stop_path()
+        self._ensure_stop_index(stop_path)
+
+        site_name = site_info["name"]
+        site_path = site_info["path"]
+        run_path = self._get_site_run_path(site_name, site_path)
+        if run_path and run_path != site_path:
+            self._save_html_run_path(site_info, run_path.replace(site_path, "", 1) or "/")
+            site_path = run_path
+        else:
+            self._save_html_run_path(site_info, "/")
+
+        self._process_has_run_dir(site_name, site_path, stop_path)
+
+        nginx_file = '{}/nginx/html_{}.conf'.format(self._vhost_path, site_name)
+        conf = public.readFile(nginx_file)
+        if conf:
+            src_path_regexp = re.compile(r'root\s+' + re.escape(site_path) + r'/?\s*;')
+            dst_path = 'root ' + stop_path + ''';
+
+    rewrite ^/(?!bt-stop\\.html$).* /bt-stop.html last;
+    location = /bt-stop.html {
+        root ''' + stop_path + ''';
+        internal;
+    }
+'''
+            if src_path_regexp.search(conf):
+                conf = src_path_regexp.sub(dst_path, conf, 1)
+            else:
+                conf = conf.replace(site_path + ";", stop_path + ";")
+            conf = conf.replace("include", "#include")
+            public.writeFile(nginx_file, conf)
+
+        apache_file = '{}/apache/html_{}.conf'.format(self._vhost_path, site_name)
+        conf = public.readFile(apache_file)
+        if conf:
+            conf = conf.replace(site_path, stop_path)
+            conf = conf.replace("IncludeOptional", "#IncludeOptional")
+            public.writeFile(apache_file, conf)
+
+        public.M('sites').where("id=?", (site_info["id"],)).setField('status', '0')
+        if not multiple:
+            public.serviceReload()
+        public.WriteLog('TYPE_SITE', 'SITE_STOP_SUCCESS', (site_name,))
+        return public.returnMsg(True, 'SITE_STOP_SUCCESS')
+
+    def SiteStart(self, get, multiple=None):
+        site_info = self._get_site_info(get)
+        if not site_info:
+            return public.returnMsg(False, 'SITE_NOT_EXISTS')
+
+        stop_path = self._get_stop_path()
+        site_name = site_info["name"]
+        site_path = site_info["path"]
+        _, run_path = self._get_html_run_path_from_config(site_info)
+        if run_path and run_path != "/":
+            site_path += run_path
+
+        nginx_file = '{}/nginx/html_{}.conf'.format(self._vhost_path, site_name)
+        conf = public.readFile(nginx_file)
+        if conf:
+            conf = conf.replace(stop_path, site_path)
+            conf = re.sub(
+                r'\s*rewrite\s+.*bt-stop\\\.html.*\s+/bt-stop.html\s+last;\s*location\s*=\s*/bt-stop.html\s*{[^}]+}[^\n]*\n',
+                "",
+                conf
+            )
+            conf = conf.replace("#include", "include")
+            public.writeFile(nginx_file, conf)
+
+        apache_file = '{}/apache/html_{}.conf'.format(self._vhost_path, site_name)
+        conf = public.readFile(apache_file)
+        if conf:
+            conf = conf.replace(stop_path, site_path)
+            conf = conf.replace("#IncludeOptional", "IncludeOptional")
+            public.writeFile(apache_file, conf)
+
+        public.M('sites').where("id=?", (site_info["id"],)).setField('status', '1')
+        if not multiple:
+            public.serviceReload()
+        public.WriteLog('TYPE_SITE', 'SITE_START_SUCCESS', (site_name,))
+        return public.returnMsg(True, 'SITE_START_SUCCESS')
+
+    def stop_project(self, get):
+        return self.SiteStop(get)
+
+    def start_project(self, get):
+        return self.SiteStart(get)
+
+    def restart_project(self, get):
+        self.SiteStop(get)
+        return self.SiteStart(get)
 
     # 删除指定项目
     def remove_project(self, get):

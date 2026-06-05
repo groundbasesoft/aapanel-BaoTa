@@ -245,6 +245,9 @@ class panelSSL:
         if not hasattr(get,'siteName'):
                 return public.returnMsg(False,'缺少参数siteName')
         siteName = get.siteName
+        if public.M('sites').where('name=?',(siteName,)).count()==0:
+            return public.returnMsg(False,'站点不存在')
+
         reload = get.get("reload",0)
         certInfo = self.get_order_find(get)
 
@@ -252,8 +255,10 @@ class panelSSL:
             get.status = 1
             self.set_auto_renew_cert(get)  # 宝塔证书且签发时设置自动续签任务
         path = '/www/server/panel/vhost/cert/' + siteName
+        if  not os.path.abspath(path).startswith('/www/server/panel/vhost/cert/'):
+            return public.returnMsg(False,'非法路径')
         if not os.path.exists(path):
-            public.ExecShell('mkdir -p ' + path)
+            public.Mkdir(path,0o755,"P")
         csrpath = path+"/fullchain.pem"
         keypath = path+"/privkey.pem"
         pidpath = path+"/certOrderId"
@@ -1431,9 +1436,11 @@ class panelSSL:
             result = self.GetCert(get)
             if not 'privkey' in result: return result
             siteName = get.siteName
+            if public.M('sites').where('name=?',(siteName,)).count()==0:
+                return public.returnMsg(False,'站点不存在')
             path = '/www/server/panel/vhost/cert/' + siteName
             if not os.path.exists(path):
-                public.ExecShell('mkdir -p ' + path)
+                public.Mkdir(path,0o755,"P")
             csrpath = path+"/fullchain.pem"
             keypath = path+"/privkey.pem"
 
@@ -1481,7 +1488,7 @@ class panelSSL:
         try:
             vpath = '/www/server/panel/vhost/ssl/' + get.certName.replace("*.",'')
             if not os.path.exists(vpath): return public.returnMsg(False,'证书不存在!')
-            public.ExecShell("rm -rf " + vpath)
+            public.Rm(vpath)
             return public.returnMsg(True,'证书已删除!')
         except:
             return public.returnMsg(False,'删除失败!')
@@ -1496,7 +1503,7 @@ class panelSSL:
             vpath = '/www/server/panel/vhost/ssl/' + certInfo['subject']
             vpath=vpath.replace("*.",'')
             if not os.path.exists(vpath):
-                public.ExecShell("mkdir -p " + vpath)
+                public.Mkdir(vpath,0o755,"P")
             public.writeFile(vpath + '/privkey.pem',public.readFile(get.keyPath))
             public.writeFile(vpath + '/fullchain.pem',public.readFile(get.certPath))
             public.writeFile(vpath + '/info.json',json.dumps(certInfo))

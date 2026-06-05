@@ -48,7 +48,7 @@ def check_run():
             try_users.append(u_info['user'] + ' > 可登录的用户 [中危]')
 
     if try_users:
-        return False, '以下用户存在安全风险: <br />' + ('<br />'.join(try_users))
+        return False, '以下用户存在安全风险: <br/>' + ('<br/>'.join(try_users))
 
     return True,'无风险'
 

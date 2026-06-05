@@ -54,7 +54,7 @@ def check_run():
             not_ssl_list.append(site_info['name'] + ' 过期时间: ' + public.format_date("%Y-%m-%d",cert_timeout))
 
     if not_ssl_list:
-        return False ,'以下站点SSL证书已过期: <br />' + ('<br />'.join(not_ssl_list))
+        return False ,'以下站点SSL证书已过期: <br/>' + ('<br/>'.join(not_ssl_list))
 
     return True,'无风险'
 

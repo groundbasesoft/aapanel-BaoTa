@@ -76,7 +76,7 @@ if os.path.exists(basic_auth_conf):
 # 初始化SESSION服务
 app.secret_key = public.md5(
     str(os.uname()) +
-    str(psutil.boot_time()))
+    str(psutil.boot_time())+public.get_secret_key())
 local_ip = None
 my_terms = {}
 
@@ -566,7 +566,7 @@ def home():
     data['lan'] = public.GetLan('index')
     data['js_random'] = get_js_random()
     public.get_rsa_public_key()  # 堡塔多机管理会跳过登录直达 /bind 和 /home 为防无法触发 rsa_public_key 生成
-    return render_template('index1.html', data=data)
+    return render_template('index.html', data=data)
 
 
 @app.route('/xterm', methods=method_all)
@@ -577,7 +577,7 @@ def xterm():
     if request.method == method_get[0]:
         import system
         data = system.system().GetConcifInfo()
-        return render_template('index1.html', data=data)
+        return render_template('index.html', data=data)
     import ssh_terminal
 
     ssh_host_admin = ssh_terminal.ssh_host_admin()
@@ -597,7 +597,7 @@ def bind():
     data = {}
     g.title = '请先绑定宝塔帐号'
     public.get_rsa_public_key()  # 堡塔多机管理会跳过登录直达 /bind 和 /home 为防无法触发 rsa_public_key 生成
-    return render_template('index1.html', data=data)
+    return render_template('index.html', data=data)
 
 
 @app.route('/error', methods=method_get)
@@ -616,7 +616,7 @@ def modify_password():
     # if not session.get('password_expire',False): return redirect('/',302)
     data = {}
     g.title = '密码已过期，请修改!'
-    return render_template('index1.html', data=data)
+    return render_template('index.html', data=data)
 
 
 @app.route('/site', methods=method_all)
@@ -644,7 +644,7 @@ def site(action=None,pdata=None):
 
         if request.path in ['/site_ifame']:
             return render_template('site.html', data=data)
-        return render_template('index1.html', data=data)
+        return render_template('index.html', data=data)
 
     siteObject = panelSite.panelSite()
 
@@ -690,7 +690,8 @@ def site(action=None,pdata=None):
             "multiple_basedir", "multiple_limit_net", "multiple_referer", 'check_ssl', "set_404_config", "get_404_config", "set_restart_task", "get_restart_task",
             "get_domains", "InputBackup","export_sites_to_csv","DelRewriteTel","open_cdn_ip","set_site_dns", "set_site_ignore_https_mode",
             "set_ignore_view_domain_title", "get_view_title_content", "set_free_total_status", "get_free_total_status",
-            "get_https_settings", "set_global_http2https")
+            "get_https_settings", "set_global_http2https",
+            "set_ignore_upgrade_cert", "create_activity_order", "activity_payment_status")
     return publicObject(siteObject, defs, None, pdata)
 
 
@@ -710,7 +711,7 @@ def ftp(pdata=None):
             data['isSetup'] = False
         data['lan'] = public.GetLan('ftp')
         is_bind()
-        return render_template('index1.html', data=data)
+        return render_template('index.html', data=data)
     import ftp
     ftpObject = ftp.ftp()
     defs = ('AddUser', 'DeleteUser', 'SetUserPassword', 'SetStatus', 'setPort',
@@ -746,7 +747,7 @@ def database(action=None,pdata=None):
         data['lan'] = public.GetLan('database')
         data['js_random'] = get_js_random()
         is_bind()
-        return render_template('index1.html', data=data)
+        return render_template('index.html', data=data)
 
     import database
     databaseObject = database.database()
@@ -760,7 +761,7 @@ def database(action=None,pdata=None):
             'GetCloudServer', 'RemoveCloudServer', 'ModifyCloudServer',
             'SyncToDatabases', 'SyncGetDatabases',
             'GetDatabaseAccess', 'SetDatabaseAccess',
-            'ToBackup', 'GetBackup', 'InputSql', 'DelBackup',
+            'ToBackup', 'GetBackup', 'InputSql', 'DelBackup', 'GetBackupStatus',
             'GetMysqlUser', 'GetDatabasesList', 'AddMysqlUser', 'DelMysqlUser', 'AddUserGrants', 'DelUserGrants', 'GetUserGrants', 'ChangeUserPass', 'GetUserInfo',
             'GetBackupDatabase', 'GetAllBackup', 'GetBackupInfo', 'ToBackupAll', 'InputSqlAll',
             'set_auto_sqlist', 'set_auto_sqlist', 'GetPushUser', 'ModifyTableComment', 'export_table_structure', 'set_restart_task', 'get_restart_task','view_database_types',
@@ -822,7 +823,7 @@ def control(action=None,pdata=None):
     import system
     data = system.system().GetConcifInfo()
     data['lan'] = public.GetLan('control')
-    return render_template('index1.html', data=data)
+    return render_template('index.html', data=data)
 
 
 @app.route('/logs', methods=method_all)
@@ -835,7 +836,7 @@ def logs(action=None,pdata=None):
         data = {}
         data['lan'] = public.GetLan('soft')
         data['show_workorder'] = not os.path.exists('data/not_workorder.pl')
-        return render_template('index1.html', data=data)
+        return render_template('index.html', data=data)
 
 
 @app.route('/firewall', methods=method_all)
@@ -851,7 +852,7 @@ def firewall(action=None,pdata=None):
         data['lan'] = public.GetLan('firewall')
         data['js_random'] = get_js_random()
 
-        return render_template('index1.html', data=data)
+        return render_template('index.html', data=data)
 
     import firewalls
     firewallObject = firewalls.firewalls()
@@ -890,45 +891,6 @@ def ssh_security(pdata=None):
     return publicObject(firewallObject, defs, None, pdata, is_csrf)
 
 
-@app.route('/monitor', methods=method_all)
-def panel_monitor(pdata=None):
-    # 云控统计信息
-    comReturn = comm.local()
-    if comReturn: return comReturn
-    if comm.get_sk(): return abort(404)
-    import monitor
-    dataObject = monitor.Monitor()
-    defs = ('get_spider', 'get_exception', 'get_request_count_qps',
-            'load_and_up_flow', 'get_request_count_by_hour')
-    return publicObject(dataObject, defs, None, pdata)
-
-
-@app.route('/san', methods=method_all)
-def san_baseline(pdata=None):
-    # 云控安全扫描
-    comReturn = comm.local()
-    if comReturn: return comReturn
-    if comm.get_sk(): return abort(404)
-    import san_baseline
-    dataObject = san_baseline.san_baseline()
-    defs = ('start', 'get_api_log', 'get_resut', 'get_ssh_errorlogin',
-            'repair', 'repair_all')
-    return publicObject(dataObject, defs, None, pdata)
-
-
-@app.route('/password', methods=method_all)
-def panel_password(pdata=None):
-    # 云控密码管理
-    comReturn = comm.local()
-    if comReturn: return comReturn
-    if comm.get_sk(): return abort(404)
-    import password
-    dataObject = password.password()
-    defs = ('set_root_password', 'get_mysql_root', 'set_mysql_password',
-            'set_panel_password', 'SetPassword', 'SetSshKey', 'StopKey',
-            'GetConfig', 'StopPassword', 'GetKey', 'get_databses',
-            'rem_mysql_pass', 'set_mysql_access', "get_panel_username")
-    return publicObject(dataObject, defs, None, pdata)
 
 
 @app.route('/warning', methods=method_all)
@@ -964,34 +926,8 @@ def panel_warning(pdata=None):
     return publicObject(dataObject, defs, None, pdata)
 
 
-@app.route('/bak', methods=method_all)
-def backup_bak(pdata=None):
-    # 云控备份服务
-    comReturn = comm.local()
-    if comReturn: return comReturn
-    if comm.get_sk(): return abort(404)
-    import backup_bak
-    dataObject = backup_bak.backup_bak()
-    defs = ('get_sites', 'get_databases', 'backup_database', 'backup_site',
-            'backup_path', 'get_database_progress', 'get_site_progress',
-            'down', 'get_down_progress', 'download_path', 'backup_site_all',
-            'get_all_site_progress', 'backup_date_all',
-            'get_all_date_progress')
-    return publicObject(dataObject, defs, None, pdata)
 
 
-@app.route('/abnormal', methods=method_all)
-def abnormal(pdata=None):
-    # 云控系统统计
-    comReturn = comm.local()
-    if comReturn: return comReturn
-    if comm.get_sk(): return abort(404)
-    import abnormal
-    dataObject = abnormal.abnormal()
-    defs = ('mysql_server', 'mysql_cpu', 'mysql_count', 'php_server',
-            'php_conn_max', 'php_cpu', 'CPU', 'Memory', 'disk',
-            'not_root_user', 'start')
-    return publicObject(dataObject, defs, None, pdata)
 
 
 @app.route('/project/<mod_name>/<def_name>/<stype>', methods=method_all)
@@ -1039,7 +975,7 @@ def docker(action=None, pdata=None):
         data = system.system().GetConcifInfo()
         data['js_random'] = get_js_random()
         data['lan'] = public.GetLan('files')
-        return render_template('index1.html', data=data)
+        return render_template('index.html', data=data)
 
 
 @app.route('/dbmodel/<mod_name>/<def_name>', methods=method_all)
@@ -1072,7 +1008,7 @@ def files(pdata=None):
         data['js_random'] = get_js_random()
         if request.path in ['/files_ifame']:
             return render_template('files.html', data=data)
-        return render_template('index1.html', data=data)
+        return render_template('index.html', data=data)
 
     import files
     filesObject = files.files()
@@ -1102,7 +1038,9 @@ def files(pdata=None):
             'SplitFile', 'JoinConfigFile', 'JoinFile',  # 切割文件，合并文件
             'file_history', 'file_history_list', 'del_file_history', 'list_backups', 'restore_backup', 'delete_backup', 'download_backup', 'get_backup_config', 'edit_backup_config','set_backup_status',
             'SearchFilesData', 'update_cors_config', 'delete_cors_config', 'view_cors_config',
-            'merge_split_file', 'get_zip_status', 'GetDirNew','upload_files_exists', 'del_history','del_history_recursive', 'Del_Recycle_bin_new', 'Close_Recycle_bin_new', 'Batch_Del_Recycle_bin'
+            'merge_split_file', 'get_zip_status', 'GetDirNew','upload_files_exists', 'del_history','del_history_recursive', 'Del_Recycle_bin_new', 'Close_Recycle_bin_new', 'Batch_Del_Recycle_bin',
+            # 应用打开方式（Open With）— 数据文件: data/app_open.json
+            'get_app_open', 'set_app_open'
             )
     return publicObject(filesObject, defs, None, pdata)
 
@@ -1121,7 +1059,7 @@ def crontab(action=None,pdata=None):
         data['js_random'] = get_js_random()
         if request.path in ['/crontab_ifame']:
             return render_template('crontab.html', data=data)
-        return render_template('index1.html', data=data)
+        return render_template('index.html', data=data)
 
     import crontab
     crontabObject = crontab.crontab()
@@ -1148,7 +1086,7 @@ def soft(action=None,pdata=None):
     data['lan'] = public.GetLan('soft')
     data['js_random'] = get_js_random()
     is_bind()
-    return render_template('index1.html', data=data)
+    return render_template('index.html', data=data)
 
 
 @app.route('/config', methods=method_all)
@@ -1198,7 +1136,7 @@ def config(action=None,pdata=None):
         if public.is_local(): data['is_local'] = 'checked'
         is_bind()
         
-        return render_template('index1.html', data=data)
+        return render_template('index.html', data=data)
 
     import config
     defs = (
@@ -1335,7 +1273,7 @@ def mail(action=None,pdata=None):
     comReturn = comm.local()
     if comReturn: return comReturn
     is_bind()
-    return render_template('index1.html', data={})
+    return render_template('index.html', data={})
 
 
 @app.route('/wp', methods=method_all)
@@ -1346,7 +1284,7 @@ def wp(action=None,pdata=None):
     comReturn = comm.local()
     if comReturn: return comReturn
     is_bind()
-    return render_template('index1.html', data={})
+    return render_template('index.html', data={})
 
 @app.route('/node', methods=method_all)
 @app.route('/node/<action>', methods=method_all)
@@ -1356,7 +1294,7 @@ def node(action=None,pdata=None):
     comReturn = comm.local()
     if comReturn: return comReturn
     is_bind()
-    return render_template('index1.html', data={})
+    return render_template('index.html', data={})
 
 @app.route('/ai', methods=method_all)
 @app.route('/ai/<action>', methods=method_all)
@@ -1366,7 +1304,7 @@ def ai(action=None,pdata=None):
     comReturn = comm.local()
     if comReturn: return comReturn
     is_bind()
-    return render_template('index1.html', data={})
+    return render_template('index.html', data={})
 
 @app.route('/domain', methods=method_all)
 @app.route('/domain/<action>', methods=method_all)
@@ -1376,7 +1314,7 @@ def domain(action=None,pdata=None):
     comReturn = comm.local()
     if comReturn: return comReturn
     is_bind()
-    return render_template('index1.html', data={})
+    return render_template('index.html', data={})
 
 @app.route('/vhost', methods=method_all)
 @app.route('/vhost/<action>', methods=method_all)
@@ -1386,7 +1324,7 @@ def vhost(action=None,pdata=None):
     comReturn = comm.local()
     if comReturn: return comReturn
     is_bind()
-    return render_template('index1.html', data={})
+    return render_template('index.html', data={})
 
 
 @app.route('/ssl', methods=method_all)
@@ -1400,7 +1338,7 @@ def ssl(action=None,pdata=None):
     if request.method == method_get[0]:
         if request.args.get('action') not in ['download_cert']:
             data = {}
-            return render_template('index1.html', data=data)
+            return render_template('index.html', data=data)
 
     toObject = panelSSL.panelSSL()
     defs = ('check_url_txt', 'RemoveCert', 'renew_lets_ssl', 'SetCertToSite',
@@ -1473,18 +1411,6 @@ def plugin(pdata=None):
     return publicObject(pluginObject, defs, None, pdata)
 
 
-@app.route('/wxapp', methods=method_all)
-@app.route('/panel_wxapp', methods=method_all)
-def panel_wxapp(pdata=None):
-    # 微信小程序绑定接口
-    comReturn = comm.local()
-    if comReturn: return comReturn
-    import wxapp
-    toObject = wxapp.wxapp()
-    defs = ('blind', 'get_safe_log', 'blind_result', 'get_user_info',
-            'blind_del', 'blind_qrcode')
-    result = publicObject(toObject, defs, None, pdata)
-    return result
 
 
 @app.route('/auth', methods=method_all)
@@ -1717,13 +1643,27 @@ def panel_cloud(is_csrf=True):
     else:
         plugin_name = get.filename
 
-    if not os.path.exists('plugin/' + plugin_name + '/' + plugin_name +
-                          '_main.py'):
+    try:
+        plugin_names = []
+        for name in os.listdir('plugin'):
+            if os.path.isdir(os.path.join('plugin', name)):
+                plugin_names.append(name)
+    except:
+        plugin_names = []
+    if plugin_name not in plugin_names:
+        return public.returnJson(False, 'INIT_PLUGIN_NOT_EXISTS'), json_header
+
+    plugin_base_dir = os.path.realpath('plugin')
+    plugin_dir = os.path.realpath('plugin/' + plugin_name)
+    if not plugin_dir.startswith(plugin_base_dir + os.sep):
+        return public.returnJson(False, 'INIT_PLUGIN_NOT_EXISTS'), json_header
+    plugin_main_file = os.path.join(plugin_dir, plugin_name + '_main.py')
+    if not os.path.exists(plugin_main_file):
         return public.returnJson(False, 'INIT_PLUGIN_NOT_EXISTS'), json_header
     public.package_path_append('plugin/' + plugin_name)
     plugin_main = __import__(plugin_name + '_main')
     public.mod_reload(plugin_main)
-    tmp = eval("plugin_main.%s_main()" % plugin_name)
+    tmp = getattr(plugin_main, plugin_name + '_main')()
     if not hasattr(tmp, 'download_file'):
         return public.returnJson(False,
                                  'INIT_PLUGIN_NOT_DOWN_FUN'), json_header
@@ -1777,12 +1717,13 @@ def software(pdata=None):
 
 
 @app.route('/waf', methods=method_all)
-@app.route('/waf_ifame', methods=method_all)
-def waf(pdata=None):
+@app.route('/waf/<action>', methods=method_all)
+@app.route('/waf/<action>/', methods=method_all)
+def waf(action=None,pdata=None):
     # 图标
     comReturn = comm.local()
     if comReturn: return comReturn
-    return render_template('index1.html', data={})
+    return render_template('index.html', data={})
 
 
 @app.route('/total', methods=method_all)
@@ -1790,7 +1731,7 @@ def total(pdata=None):
     # 图标
     comReturn = comm.local()
     if comReturn: return comReturn
-    return render_template('index1.html', data={})
+    return render_template('index.html', data={})
 
 
 @app.route('/btwaf_error', methods=method_get)
@@ -1827,7 +1768,17 @@ def proxy_rspamd_requests(path):
     param = "" if len(str(request.url).split('?')) < 2 else param[-1]
     import requests
     headers = {}
+    panel_cookie_name = app.config['SESSION_COOKIE_NAME']
     for h in request.headers.keys():
+        if h.lower() == 'cookie':
+            cookie_list = []
+            for cookie_name in request.cookies.keys():
+                if cookie_name == panel_cookie_name:
+                    continue
+                cookie_list.append('{}={}'.format(cookie_name,request.cookies[cookie_name]))
+            if cookie_list:
+                headers[h] = '; '.join(cookie_list)
+            continue
         headers[h] = request.headers[h]
     if request.method == "GET":
         if re.search(r"\.(js|css)$", path):
@@ -2238,7 +2189,8 @@ def panel_public():
     if not hasattr(get, 'fun'): return abort(404)
     if not public.path_safe_check("%s/%s" % (get.name, get.fun)):
         return abort(404)
-    if get.fun in ['login_qrcode', 'is_scan_ok', 'set_login']:
+    allowed_fun = ('login_qrcode', 'is_scan_ok', 'set_login')
+    if get.fun in allowed_fun:
         # 检查是否验证过安全入口
         if admin_path != '/bt' and os.path.exists(
                 admin_path_file) and not 'admin_auth' in session:
@@ -2252,7 +2204,12 @@ def panel_public():
         if type(checks) != bool or not checks:
             public.set_error_num(num_key)
             return public.getJson(checks), json_header
-        data = public.getJson(eval('pluwx.' + get.fun + '(get)'))
+        if get.fun not in allowed_fun:
+            return abort(404)
+        wx_fun = getattr(pluwx, get.fun, None)
+        if not callable(wx_fun):
+            return abort(404)
+        data = public.getJson(wx_fun(get))
         return data, json_header
     else:
         return abort(404)
@@ -2889,42 +2846,9 @@ def check_token(data):
 
 # ======================公共方法区域END============================#
 
-# workorder load code
-
-
-@app.route('/workorder/<action>', methods=method_all)
-def workorder(action, pdata=None):
-    comReturn = comm.local()
-    if comReturn: return comReturn
-
-    import panelWorkorder
-    toObject = panelWorkorder.panelWorkorder()
-
-    defs = ("get_user_info", "close", "create", "list", "get_messages",
-            "allow")
-    result = publicObject(toObject, defs, action, pdata)
-    return result
-
-
-# workorder end
 
 # ---------------------    websocket  START  -------------------------- #
 
-
-@sockets.route('/workorder_client')
-def workorder_client(ws):
-    comReturn = comm.local()
-    if comReturn: return comReturn
-
-    get = ws.receive()
-    get = json.loads(get)
-    if not check_csrf_websocket(ws, get):
-        return
-
-    import panelWorkorder
-    toObject = panelWorkorder.panelWorkorder()
-    get = get_input()
-    toObject.client(ws, get)
 
 
 @sockets.route('/ws_panel')

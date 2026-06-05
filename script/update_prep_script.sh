@@ -21,7 +21,7 @@ PANEL_UPDATING_VERSION_FILE="${PANEL_PATH}/updating_version.pl"
 
 # 定义版本控制顺序（按时间顺序排列，新版本放后面）
 # 会自动扫描所有 prepare_X_X 和 after_X_X 格式的函数
-ALL_VERSIONS=("11.3" "11.5" "11.6", "11.7", "11.8")
+ALL_VERSIONS=("11.3" "11.5" "11.6" "11.7" "11.8")
 
 # 输出成功信息, 必须输出 "BT-Panel Update Ready" 才证明预处理成功
 function success() {
@@ -89,16 +89,16 @@ function version_to_int() {
     printf "%d%02d%02d" $major $minor $micro
 }
 
-# 判断当前版本是否小于目标版本（需要执行前置操作）
+# 判断当前版本是否小于等于目标版本（需要执行前置操作）
 function need_execute() {
     local current_ver=$1
     local target_ver=$2
     local current_int=$(version_to_int "$current_ver")
     local target_int=$(version_to_int "$target_ver")
-    [ $current_int -lt $target_int ]
+    [ $current_int -le $target_int ]
 }
 
-# 判断目标版本是否在升级范围内（即目标版本 >= 指定版本）
+# 判断目标版本是否在升级范围内（即指定版本 <= 目标版本）
 # 用于限制只执行到目标版本为止的函数
 function is_in_upgrade_range() {
     local target_ver=$1  # 要检查的版本（如11.3）
@@ -170,13 +170,33 @@ function prepare_11_7() {
     # 安装 openai==1.39.0 numpy==1.21.6
     echo "[prepare 11.7] 安装必要Python包"
     local pip_bin="/www/server/panel/pyenv/bin/python3 -m pip"
-    $pip_bin install openai==1.39.0 numpy==1.21.6 2>&1
+    if $pip_bin show numpy; then
+        :
+    else
+        $pip_bin install numpy==1.21.6 2>&1
+        if [ $? -eq 0 ]; then
+            :
+        else
+            echo "[prepare 11.7] 安装失败，请手动执行: btpip install numpy==1.21.6"
+            return 1
+        fi
+    fi
+    $pip_bin install openai==1.39.0 pydantic==2.5.3 pydantic_core==2.14.6 2>&1
     if [ $? -eq 0 ]; then
         return 0
     else
-        echo "[prepare 11.7] 安装失败，请手动执行: btpip install openai==1.39.0 numpy==1.21.6"
+        echo "[prepare 11.7] 安装失败，请手动执行: btpip install openai==1.39.0 numpy==1.21.6 pydantic==2.5.3 pydantic_core==2.14.6"
         return 1
     fi
+}
+
+function prepare_11_8() {
+  echo "[prepare 11.8] 清理旧版本技能数据"
+  rm -rf /www/server/panel/data/agent/skills/btpanel
+  rm -rf /www/server/panel/data/agent/skills/btpanel_files
+  rm -rf /www/server/panel/data/agent/skills/btpanel_phpsite
+  echo "[prepare 11.8] 清理完成"
+  return 0
 }
 
 #===============================================================================
@@ -276,8 +296,8 @@ function auto_run_after() {
             fi
             echo "<<< $func_name 完成"
             executed=true
-        else
-            echo "--- 跳过 $ver (函数 $func_name 不存在)"
+#        else
+#            echo "--- 跳过 $ver (函数 $func_name 不存在)"
         fi
     done
 

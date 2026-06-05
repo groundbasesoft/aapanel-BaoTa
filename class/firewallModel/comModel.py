@@ -381,6 +381,8 @@ class main(Base):
                 cache.set(cache_key, sort_data, 86400)
         if get.export == "1":
             get.row = len(sort_data)
+        if get.row == 0:
+            return {"data": None}
         return self.return_page(sort_data, get)
 
     # 2024/3/27 上午 12:01 构造ip规则返回数据

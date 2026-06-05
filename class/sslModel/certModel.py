@@ -730,7 +730,10 @@ class main(sslBase):
             pem_file = "{}/{}/fullchain.pem".format(local_path, p_name)
 
             if os.path.isfile(pem_file):
-                hash_data = self._hash(cert_filename=pem_file)
+                try:
+                    hash_data = self._hash(cert_filename=pem_file)
+                except Exception as e:
+                    continue
                 if hash_data == ssl_hash:
                     shutil.rmtree("{}/{}".format(local_path, p_name))
 

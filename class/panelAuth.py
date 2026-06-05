@@ -312,6 +312,7 @@ class panelAuth:
         params['cycle'] = get.cycle
         params['num'] = 1  # 购买数量
         params['version'] = public.version()
+        params['free_gift'] = get.get("free_gift/d", 0)
         if 'num' in get: params['num'] = get.num
         if 'source' in get: params['source'] = get.source
         if 'coupon' in get: params['coupon'] = get.coupon
@@ -319,7 +320,7 @@ class panelAuth:
 
         try:
             params["mac"] = self.get_mac_address()
-            data = self.send_cloud('create_order_v1', params)
+            data = self.send_cloud('create_order_v2', params)
             if data.get("data", {}).get("code", 0) == 1000:
                 msg = "检测到当前服务器为镜像克隆环境，授权信息不可用，请解绑当前账号，并重新绑定获取授权信息"
                 data["msg"] = msg

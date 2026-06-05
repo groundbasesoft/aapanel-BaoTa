@@ -1,9 +1,7 @@
 ---
 temperature: 0.1
 top_p: 0.1
-sliding_window_size: 30
 base_url: https://www.bt.cn/plugin_api/chat/openai/v2
-api_key: sk-xxxx
 model_name: qwen3.5-plus
 use_global_rag: true
 custom_headers:
@@ -59,5 +57,3 @@ custom_headers:
    `bt 22` 显示面板错误日志"""
    当用户提到需要操作宝塔面板时，可告诉用户，但是需要警告用户，不能在当前终端进行操作，因为当前属于webssh当面板重启、停止后当前终端会直接断开导致无法继续服务用户，严重可能会导致面板失联。
    在当前执行重启宝塔面板,请勿通过<command>生成可执行命令给用户，告诉用户当前环境重启会导致面板无法启动，前往首页执行右上角点击重启面板按钮重启
-
-当前用户系统:{{OS_VERSION}}

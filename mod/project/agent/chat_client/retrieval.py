@@ -10,6 +10,8 @@ from typing import List, Dict, Any, Tuple
 import openai
 import numpy as np
 
+from .single_agent import SingleAgent
+
 panelPath = os.getenv('BT_PANEL')
 if not panelPath: panelPath = '/www/server/panel'
 if panelPath not in sys.path:
@@ -152,7 +154,8 @@ class RAGService:
         self.openai_api_key = openai_api_key
         self.openai_base_url = openai_base_url
         self.embedding_api_key = embedding_api_key or openai_api_key
-        self.embedding_base_url = embedding_base_url or openai_base_url
+        embedding_url = embedding_base_url or openai_base_url
+        self.embedding_base_url = public.get_home_node(embedding_url) if embedding_url and 'bt.cn' in embedding_url else embedding_url
         self.embedding_model_name = embedding_model_name
         self.small_model_name = small_model_name
         self.rag_retrieval_count = rag_retrieval_count
@@ -167,7 +170,7 @@ class RAGService:
         # )
         
         self.emb_api_key = embedding_api_key
-        self.emb_base_url = embedding_base_url
+        self.emb_base_url = public.get_home_node(embedding_base_url) if embedding_base_url and 'bt.cn' in embedding_base_url else embedding_base_url
         self.emb_model_name = embedding_model_name
         
         self.embedding_client = openai.OpenAI(
@@ -344,7 +347,7 @@ class ExternalRAGService:
         self.enable_rag_judgment = enable_rag_judgment
 
         self.judgment_api_key = api_key
-        self.judgment_base_url = base_url
+        self.judgment_base_url = public.get_home_node(base_url) if base_url and 'bt.cn' in base_url else base_url
         self.judgment_model_name = model_name
         self.judgment_default_headers = default_headers or {}
 
@@ -380,7 +383,6 @@ class ExternalRAGService:
 }"""
 
         try:
-            from chat_client.single_agent import SingleAgent
             single_agent = SingleAgent(
                 api_key=self.judgment_api_key,
                 base_url=self.judgment_base_url,
@@ -429,7 +431,6 @@ class ExternalRAGService:
                 )
 
             single_agent.close()
-            # logging.info(f"RAG Judgment Result:{time.time()-notime} {result}")
             if result["success"]:
                 return {
                     "use_rag": result["data"].get("use_rag", False),
@@ -459,7 +460,6 @@ class ExternalRAGService:
         """
         if enable_rag_judgment is None:
             enable_rag_judgment = self.enable_rag_judgment
-
         if enable_rag_judgment:
             rag_judgment = self._should_use_rag(query, session_history)
             # logging.info(f"RAG Judgment: {rag_judgment}")
@@ -483,8 +483,9 @@ class ExternalRAGService:
                 "rerank_top_n": self.rag_final_count
             }
             
+            api_url = public.get_home_node(self.API_URL) if 'bt.cn' in self.API_URL else self.API_URL
             response = requests.post(
-                self.API_URL,
+                api_url,
                 headers=headers,
                 json=payload,
                 timeout=30

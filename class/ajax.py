@@ -363,6 +363,13 @@ class ajax:
     def GetQiniuFileList(self, get):
         try:
             import json
+            path=public.GetConfigValue('setup_path') +"/panel/script/backup_" + get.name +".py"
+            path=os.path.abspath(path)
+            if not path.startswith(public.GetConfigValue('setup_path') +"/panel/script/backup_"):
+                return public.returnMsg(False, '非法的文件路径!')
+            if not os.path.exists(path):
+                return public.returnMsg(False, '备份脚本不存在!')
+
             result = public.ExecShell(public.get_python_bin() + " " +
                                       public.GetConfigValue('setup_path') +
                                       "/panel/script/backup_" + get.name +
@@ -1198,6 +1205,9 @@ CREATE TABLE IF NOT EXISTS `network` (
         if public.get_webserver() == "openlitespeed":
             shell_str = "/usr/local/lsws/lsphp{}/bin/php -i".format(
                 get.version)
+            infos=os.listdir("/usr/local/lsws/")
+            if "lsphp{}".format(get.version) not in infos:
+                return public.returnMsg(False, 'PHP版本不存在!')
             return public.ExecShell(shell_str)[0]
         sPath = '/www/server/phpinfo'
         if os.path.exists(sPath):
@@ -2026,6 +2036,10 @@ CREATE TABLE IF NOT EXISTS `network` (
         php_path = '/www/server/php/'
         if public.get_webserver() == 'openlitespeed':
             php_path = '/usr/local/lsws/lsphp'
+        #遍历php_path 目录，找到对应的PHP 版本目录
+        infos=os.listdir(php_path)
+        if php_version not in infos:
+            return public.returnMsg(False, 'PHP版本不存在!')
         php_bin = php_path + php_version + '/bin/php'
         php_ini = php_path + php_version + '/etc/php.ini'
         php_ini_lit = "/www/server/php/80/etc/php/80/litespeed/php.ini"

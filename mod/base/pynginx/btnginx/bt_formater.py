@@ -10,8 +10,6 @@ import ipaddress
 from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Optional, Any, Union, Callable
 
-from sqlalchemy.testing import exclude
-
 from .. import Config, Server, Parser, Lexer, trans_, Location, Directive, Block, dump_config, Include, \
     Http, Upstream, dump_block, parse_file, IBlock, IDirective
 from .site_detector import site_detector, SiteInfo, SITE_TYPE_STATIC, SITE_TYPE_PHP, SITE_TYPE_PROXY

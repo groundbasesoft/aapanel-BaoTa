@@ -1,1 +1,0 @@
-System.register(["./base-lib-legacy.js?v=1776335489"],function(e,t){"use strict";var i,n;return{setters:[function(e){i=e.aJ,n=e.r}],execute:function(){e("u",i("WP-LOCAL-Config-STORE",function(){return{tabActive:n("domain"),isRefreshDomain:n(!1),domain:n(""),showSSLTips:n(!1),sslTabActive:n("current")}}))}}});

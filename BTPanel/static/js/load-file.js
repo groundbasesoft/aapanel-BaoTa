@@ -1,82 +1,89 @@
 
 ; (function () { 
+	
 	// Description: 预加载文件
-	var loadResource = [
-		"/static/css/style.css?v=1776335489",
-		"/static/js/main.js?v=1776335489",
-		"/static/js/base-lib.js?v=1776335489",
-		"/static/js/__commonjsHelpers__.js?v=1776335489",
-		"/static/js/modulepreload-polyfill.js?v=1776335489",
-		"/static/js/utils-lib.js?v=1776335489",
-		"/static/js/software.js?v=1776335489",
-		"/static/js/jquery-2.2.4.min.js?v=1776335489",
-		"/static/js/utils.min.js?v=1776335489",
-		"/static/layer/layer.js?v=1776335489",
-	]
+	var loadResource = [/** injection-load-file */]
+	
+	// Description: 已加载的资源
+	var loadSession = JSON.parse(sessionStorage.getItem('load')) || []
+
+	var xhr = new XMLHttpRequest() // 创建XMLHttpRequest对象
+
 
 	/**
-	 * @description 封装 AJAX 请求
-	 * @param {string} url 请求的 URL
-	 * @param {string} method 请求方法（GET, POST, PUT, DELETE 等）
-	 * @param {Object} [data] 请求数据（可选）
-	 * @returns {Promise<any>} 返回一个 Promise，解析为响应数据
+	 * @description 设置 load 内容
+	 * @param {string} str 设置加载内容
 	 */
-	var ajax = (url, method, data = null) => {
-		return new Promise((resolve, reject) => {
-			var xhr = new XMLHttpRequest()
-			xhr.open(method, url, true)
-			xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8')
-
-			xhr.onreadystatechange = () => {
-				if (xhr.readyState === 4) {
-					if (xhr.status >= 200 && xhr.status < 300) {
-						resolve(JSON.parse(xhr.responseText))
-					} else {
-						reject(new Error(`Request failed with status ${xhr.status}`))
-					}
-				}
-			}
-
-			xhr.onerror = () => {
-				reject(new Error('Network error'))
-			}
-
-			xhr.send(data ? JSON.stringify(data) : null)
-		})
+	function setLoadContent(str) {
+		loadSession.push(str)
+		sessionStorage.setItem('load', JSON.stringify(loadSession))
 	}
 
 	/**
-	 * @description 检查是否已加载过某个
-	 * @param {string} str 路径
+	 * @description 检查dom是否已经加载
+	 * @param {string} str 
 	 * @returns {boolean}
 	 */
-	var checkLoadContent = str => {
-		var isLoad = false
-		for (var i = 0; i < loadResource.length; i++) {
-			if (loadResource[i] === str) {
-				isLoad = true
-				break
-			}
-		}
-		if (!isLoad) {
-			loadResource.push(str)
-			sessionStorage.setItem('load', JSON.stringify(loadResource))
-		}
-		return isLoad
+	function checkLoadContent(str) {
+		return loadSession.includes(str)
 	}
+
+
 	/**
-	 * @description 预加载路径
-	 * @param {string[]} urls 路径列表
+	 * @description 检查是否开始请求
+	 * @returns {boolean}
 	 */
-	var preload = urls => {
-		urls.forEach(url => {
-			if (!checkLoadContent(url)) {
-				ajax(url, 'GET').then(() => {
-					checkLoadContent(url)
-				})
-			}
-		})
+	function checkLogin() {
+		// 获取token，检查是否开始请求登录
+		var token = sessionStorage.getItem('sendXhr');
+		// 将token 初始化
+		sessionStorage.setItem('sendXhr', '0');
+		return token === '1';
 	}
-	// 获取已加载的资源
-	preload(loadResource)
+
+	// 递归请求
+	function apiSend(index, urls) {
+		if (index >= urls.length - 1) {
+		} else {
+			var isLoad = checkLoadContent(urls[index]) // 检查是否已经加载
+			var isSend = checkLogin() // 检查是否开始其他请求
+			if (isSend) return // 如果开始其他请求，终止当前请求
+			if (!isLoad) {
+				// 设置请求方法和URL，true表示异步
+				xhr.open('GET', urls[index] + '?v=1780568589', true)
+				// 发送请求
+				xhr.send()
+				// 监听onreadystatechange事件，当请求的状态发生变化时触发
+				xhr.onreadystatechange = function () {
+					// 当请求完成且成功时（readyState为4，status为200）
+					if (xhr.readyState === 4 && xhr.status === 200) {
+						// 存入SessionStorage
+						setLoadContent(urls[index])
+						// 继续下一条数据
+						apiSend(index + 1, urls)
+					}
+				}
+			} else {
+				// 继续下一条数据
+				apiSend(index + 1, urls)
+			}
+		}
+	}
+
+	// // 初始化预加载
+	function preloadInit(urlList) {
+		var loadedScripts = JSON.parse(sessionStorage.getItem('loadedScripts') || '[]')
+		var urls = urlList.filter(url => !loadedScripts.includes(url))
+		apiSend(0, urls)
+	}
+
+	// 预加载初始化
+	window.onload = function () {
+		// 如果当前环境是HTTPS则不进行预加载请求
+		if (window.location.protocol === 'https:') {
+			return
+		}
+		preloadInit(loadResource)
+	}
+
 })()

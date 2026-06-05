@@ -4622,7 +4622,7 @@ class config:
     @staticmethod
     def get_versionnumber(get):
         # 打时会替换 为版本时间戳
-        return {"status": True, "msg": "ok", "code": 200, "data": {"version_number": int("1776335489")}}
+        return {"status": True, "msg": "ok", "code": 200, "data": {"version_number": int("VERSION_NUMBER")}}
 
     @staticmethod
     def get_passkey_list(get):

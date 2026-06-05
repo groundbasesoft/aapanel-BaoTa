@@ -386,7 +386,7 @@ class SearchReplace:
     def execute(self, file_path: str, old_str: str, new_str: str, replace_all: bool = False) -> str:
         try:
             if not os.path.exists(file_path):
-                return _xml_response("error", f"File not found: {file_path}")
+                return _xml_response("SearchReplace", "error", f"File not found: {file_path}")
             
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -409,6 +409,6 @@ class SearchReplace:
             # Trim diff using the ported function
             trimmed_diff = _trim_diff(diff)
             
-            return _xml_response("done", f"Edit applied successfully.\n<file_changes>\nThe toolcall made the following changes to the file `{file_path}`:\n```\n{trimmed_diff}\n```\n</file_changes>")
+            return _xml_response("SearchReplace", "done", f"Edit applied successfully.\n<file_changes>\nThe toolcall made the following changes to the file `{file_path}`:\n```\n{trimmed_diff}\n```\n</file_changes>")
         except Exception as e:
-            return _xml_response("error", str(e))
+            return _xml_response("SearchReplace", "error", str(e))

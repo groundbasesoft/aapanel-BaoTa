@@ -117,7 +117,10 @@ class main:
 
     # 获取日志路径
     def get_site_log_file(self, get):
-        res = public.M('sites').where('name=?', (get.siteName,)).select()[0]['project_type'].lower()
+        res = public.M('sites').where('name=?', (get.siteName,)).select()
+        if not res:
+            return public.returnMsg(False, "站点不存在")
+        res = res[0]['project_type'].lower()
         if res == 'php':
             res = ''
         else:

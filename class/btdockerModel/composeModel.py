@@ -972,29 +972,32 @@ class main(dockerBase):
                 res = tmp
                 p_name_tmp.clear()
         else:
-            yaml = "{}/docker-compose.yaml".format(get.path)
-            yam = "{}/docker-compose.yam".format(get.path)
-            yml = "{}/docker-compose.yml".format(get.path)
-            if os.path.exists(yaml):
-                res = [{
-                    "project_name": get.path.split("/")[-1],
-                    "conf_file": yaml,
-                    "remark": "从本地添加"
-                }]
-            elif os.path.exists(yam):
-                res = [{
-                    "project_name": get.path.split("/")[-1],
-                    "conf_file": yam,
-                    "remark": "从本地添加"
-                }]
-            elif os.path.exists(yml):
-                res = [{
-                    "project_name": get.path.split("/")[-1],
-                    "conf_file": yml,
-                    "remark": "从本地添加"
-                }]
-            else:
-                res = list()
+            # 会重复先注释
+
+            # yaml = "{}/docker-compose.yaml".format(get.path)
+            # yam = "{}/docker-compose.yam".format(get.path)
+            # yml = "{}/docker-compose.yml".format(get.path)
+            # if os.path.exists(yaml):
+            #     res = [{
+            #         "project_name": get.path.split("/")[-1],
+            #         "conf_file": yaml,
+            #         "remark": "从本地添加"
+            #     }]
+            # elif os.path.exists(yam):
+            #     res = [{
+            #         "project_name": get.path.split("/")[-1],
+            #         "conf_file": yam,
+            #         "remark": "从本地添加"
+            #     }]
+            # elif os.path.exists(yml):
+            #     res = [{
+            #         "project_name": get.path.split("/")[-1],
+            #         "conf_file": yml,
+            #         "remark": "从本地添加"
+            #     }]
+            # else:
+            #     res = list()
+            res = []
 
             if not os.path.isdir(get.path):
                 return res

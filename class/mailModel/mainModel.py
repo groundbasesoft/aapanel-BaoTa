@@ -1534,6 +1534,7 @@ systemctl restart  opendkim'''.format(domain=domain)
 
         if not os.path.exists(rspamd_pub_file): return ''
         file_body = public.readFile(rspamd_pub_file).replace(' ', '').replace('\n', '').split('"')
+        if len(file_body) < 4: return ''
         value = file_body[1] + file_body[3]
         return value
 

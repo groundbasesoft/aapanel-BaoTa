@@ -541,7 +541,8 @@ def run_command_with_call_log(cmd, call_log):
 
         while True:
             try:
-                output = os.read(master, 1024).decode()
+                # 避免输出被异常阶段
+                output = os.read(master, 1024).decode("utf-8", errors="ignore")
                 if output:
                     call_log(output)
                 if not output and process.poll() is not None:
@@ -606,7 +607,7 @@ def curl_bin():
 
 # 格式化CURL响应
 def curl_format(req: str):
-    match = re.search("(?P<header>(.*\r?\n)+)\r?\n", req)
+    match = re.search(r"(?P<header>(.+\r?\n)+.*)(\r?\n){2}", req)
     if not match:
         return req, {}, 0
     header_str = match.group()

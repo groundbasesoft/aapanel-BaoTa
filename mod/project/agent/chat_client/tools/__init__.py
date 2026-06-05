@@ -242,7 +242,6 @@ class ToolRegistry:
 
     def _generate_schema(self, func: Callable) -> Dict[str, Any]:
         """根据文档字符串和类型提示生成 OpenAI 函数 Schema"""
-        # 对于 callable 对象（类的实例），使用 __call__ 方法
         target_func = func
         if not inspect.isfunction(func) and not inspect.ismethod(func):
             if hasattr(func, '__call__'):
@@ -254,7 +253,8 @@ class ToolRegistry:
         parameters = {
             "type": "object",
             "properties": {},
-            "required": []
+            "required": [],
+            "additionalProperties": False
         }
         
         try:
@@ -266,21 +266,14 @@ class ToolRegistry:
             if name == "self" or name == "cls":
                 continue
             
-            # Skip *args and **kwargs
             if param.kind == inspect.Parameter.VAR_POSITIONAL or param.kind == inspect.Parameter.VAR_KEYWORD:
                 continue
                 
             param_type = type_hints.get(name, str)
-            json_type = self._python_type_to_json_type(param_type)
-            
-            param_info = {"type": json_type}
-            # 可以改进简单的描述提取，但目前暂跳过
-            # 除非解析文档字符串参数。
+            param_info = self._python_type_to_json_schema(param_type)
             
             parameters["properties"][name] = param_info
-            
-            if param.default == inspect.Parameter.empty:
-                parameters["required"].append(name)
+            parameters["required"].append(name)
                 
         return {
             "type": "function",
@@ -292,19 +285,41 @@ class ToolRegistry:
             }
         }
 
-    def _python_type_to_json_type(self, py_type) -> str:
+    def _python_type_to_json_schema(self, py_type) -> Dict[str, Any]:
+        origin = getattr(py_type, "__origin__", None)
+        args = getattr(py_type, "__args__", None)
+        
+        if origin is Union:
+            non_none = [a for a in args if a is not type(None)]
+            if len(non_none) == 1:
+                return self._python_type_to_json_schema(non_none[0])
+            types = []
+            for a in non_none:
+                schema = self._python_type_to_json_schema(a)
+                t = schema.get("type", "string")
+                if isinstance(t, list):
+                    types.extend(t)
+                else:
+                    types.append(t)
+            return {"type": list(dict.fromkeys(types))}
+        
         if py_type == int:
-            return "integer"
+            return {"type": "integer"}
         elif py_type == float:
-            return "number"
+            return {"type": "number"}
         elif py_type == bool:
-            return "boolean"
-        elif py_type == list or getattr(py_type, "__origin__", None) == list:
-            return "array"
-        elif py_type == dict or getattr(py_type, "__origin__", None) == dict:
-            return "object"
+            return {"type": "boolean"}
+        elif py_type == list or origin == list:
+            result = {"type": "array"}
+            if args and len(args) > 0:
+                result["items"] = self._python_type_to_json_schema(args[0])
+            else:
+                result["items"] = {"type": "string"}
+            return result
+        elif py_type == dict or origin == dict:
+            return {"type": "object", "properties": {}, "additionalProperties": False}
         else:
-            return "string"
+            return {"type": "string"}
 
 # 全局注册实例
 registry = ToolRegistry()
@@ -322,3 +337,4 @@ from . import todo
 from . import summary
 from . import webfetch
 from . import skill
+from . import read

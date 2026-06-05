@@ -1940,7 +1940,8 @@ rm -f {cronFile}
     
     # 获取各个类型数据库
     def GetDatabases(self, get):
-        from panelMysql import panelMysql
+        # from panelMysql import panelMysql
+        import datatool
         db_type = getattr(get, "db_type", "mysql")
         
         crontab_databases = public.M("crontab").field("id,sName").where("LOWER(type)=LOWER(?)", (db_type)).select()
@@ -1963,14 +1964,20 @@ rm -f {cronFile}
         for database in databases:
             try:
                 if database.get("name") is None: continue
-                table_list = panelMysql().query("show tables from `{db_name}`;".format(db_name=database["name"]))
+                # table_list = panelMysql().query("show tables from `{db_name}`;".format(db_name=database["name"]))
+                get.db_name = database["name"]
+                ret = datatool.datatools().GetdataInfo(get)
+                if not ret or "tables" not in ret:
+                    table_list = []
+                else:
+                    table_list = [i["table_name"] for i in ret["tables"]]
                 if not isinstance(table_list, list):
                     continue
                 cron_id = public.M("mysql_increment_settings").where("tb_name == ''", ()).getField("cron_id")
                 database["table_list"] = [{"tb_name": "所有", "value": "", "cron_id": cron_id if cron_id else None}]
                 for tb_name in table_list:
-                    cron_id = public.M("mysql_increment_settings").where("tb_name in (?)", (tb_name[0])).getField("cron_id")
-                    database["table_list"].append({"tb_name": tb_name[0], "value": tb_name[0], "cron_id": cron_id if cron_id else None})
+                    cron_id = public.M("mysql_increment_settings").where("tb_name in (?)", (tb_name)).getField("cron_id")
+                    database["table_list"].append({"tb_name": tb_name, "value": tb_name, "cron_id": cron_id if cron_id else None})
                 
                 database["cron_id"] = []
                 for db in crontab_databases:

@@ -43,7 +43,7 @@ def check_run():
         if os.path.exists(user_ini): continue
         not_uini.append(s['name'])
     if not_uini:
-        return False,'以下网站未开启防跨站功能：<br />' + ('<br />'.join(not_uini))
+        return False,'以下网站未开启防跨站功能：<br/>' + ('<br/>'.join(not_uini))
     return True,'无风险'
 
 

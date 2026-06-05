@@ -357,6 +357,11 @@ class panelWarning:
         '''
         m_name = args.m_name.strip()
         ignore_file = self.__ignore + '/' + m_name + '.pl'
+        ignore_file=os.path.abspath(ignore_file)
+        if not ignore_file.startswith(os.path.abspath(self.__ignore)):
+            return public.returnMsg(False, '非法的模块名称')
+        
+
         if os.path.exists(ignore_file):
             os.remove(ignore_file)
         else:

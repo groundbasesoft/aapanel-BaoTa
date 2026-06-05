@@ -1,1 +1,0 @@
-import{c as o,b0 as n,e as p,m as u,S as a,i as m}from"./base-lib.js?v=1776335489";function c(e){return typeof e=="function"||Object.prototype.toString.call(e)==="[object Object]"&&!m(e)}const b=o({name:"BtInputNumber",props:{...n},setup(e,{attrs:r,slots:t}){return()=>p(a,u(r,e),c(t)?t:{default:()=>[t]})}});export{b as B};

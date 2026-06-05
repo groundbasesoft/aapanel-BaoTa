@@ -1,1 +1,1 @@
-import{cZ as e}from"./utils-lib.js?v=1776335489";import{j as r,k as t}from"./base-lib.js?v=1776335489";import"./__commonjsHelpers__.js?v=1776335489";const c={};function o(n,s){return r(),t("div")}const m=e(c,[["render",o]]);export{m as default};
+import{a as e,n as t}from"./btpanel-ui-lib.js?v=1780568589";var n={...t,BtDivider:e},r=`@btpanel/ui/other`,i=n;export{r as name,i as provider};

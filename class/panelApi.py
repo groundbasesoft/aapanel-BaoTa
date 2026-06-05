@@ -200,6 +200,9 @@ class panelApi:
         data['apps'] = tmp_apps
         self.save_api_config(data)
         s_file = '/dev/shm/{}'.format(args.bind_app)
+        s_file = os.path.abspath(s_file)
+        if not s_file.startswith('/dev/shm/'):
+            return public.returnMsg(False,'无效的文件路径!')
         if os.path.exists(s_file):
             os.remove(s_file)
         return public.returnMsg(True,'删除成功!')

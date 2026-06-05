@@ -15,6 +15,6 @@ def TaskSummary(content: str, **kwargs) -> str:
     sessions_dir = kwargs.get("sessions_dir", "sessions")
     
     if not session_id:
-        return _xml_response("error", "Session ID not found in context. This tool requires a session context.")
+        return _xml_response("TaskSummary", "error", "Session ID not found in context. This tool requires a session context.")
             
-    return _xml_response("done", content)
+    return _xml_response("TaskSummary", "done", content)

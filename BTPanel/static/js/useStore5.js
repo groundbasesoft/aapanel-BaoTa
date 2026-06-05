@@ -1,1 +1,0 @@
-import{aI as o,aJ as t}from"./base-lib.js?v=1776335489";const r=t("DOCKER-APPSTORE-STORE",{state:()=>({deployMenuData:{app_type:"all",maximum_cpu:"--",maximum_memory:"--"}})}),s=()=>{const e=r();return{refs:o(e),...e}};export{s as g};

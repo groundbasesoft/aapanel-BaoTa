@@ -957,6 +957,17 @@ class data:
     def set_https_port(self, get):
         if not hasattr(get, 'siteName'): return public.returnMsg(False, '参数错误!')
         if not hasattr(get, 'port'): return public.returnMsg(False, '参数错误!')
+        
+        conf_tmp= os.path.abspath('/www/server/panel/vhost/nginx/{}.conf'.format(get.siteName))
+        if not conf_tmp.startswith('/www/server/panel/vhost/nginx/'):
+            return public.returnMsg(False, '非法的站点名称!')
+        try:
+            port = int(get.port)
+            if port < 1 or port > 65535:
+                return public.returnMsg(False, '端口号必须在1-65535之间!')
+        except:
+            return public.returnMsg(False, '端口号必须是数字!')
+
         if not os.path.exists('/www/server/panel/vhost/nginx/{}.conf'.format(get.siteName)):
             return public.returnMsg(False, '配置文件不存在!')
         conf = public.readFile('/www/server/panel/vhost/nginx/{}.conf'.format(get.siteName))

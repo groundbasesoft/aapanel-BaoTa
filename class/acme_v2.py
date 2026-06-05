@@ -25,6 +25,7 @@ import time
 import os
 import sys
 import uuid
+import random
 
 os.chdir('/www/server/panel')
 if not 'class/' in sys.path:
@@ -208,8 +209,10 @@ class acme_v2:
         if api_index in self._config['apis']:
             if 'expires' in self._config['apis'][api_index] and 'directory' in self._config['apis'][api_index]:
                 if time.time() < self._config['apis'][api_index]['expires']:
-                    self._apis = self._config['apis'][api_index]['directory']
-                    return self._apis
+                    cached_directory = self._config['apis'][api_index]['directory']
+                    if 'renewalInfo' in cached_directory or self._config['apis'][api_index].get('ari_checked'):
+                        self._apis = cached_directory
+                        return self._apis
 
         # 尝试从云端获取
         res = requests.get(self._url,s_type=self._request_type)
@@ -226,10 +229,13 @@ class acme_v2:
         self._apis['newOrder'] = s_body['newOrder']
         self._apis['revokeCert'] = s_body['revokeCert']
         self._apis['keyChange'] = s_body['keyChange']
+        if s_body.get('renewalInfo'):
+            self._apis['renewalInfo'] = s_body['renewalInfo']
 
         # 保存到配置文件
         self._config['apis'][api_index] = {}
         self._config['apis'][api_index]['directory'] = self._apis
+        self._config['apis'][api_index]['ari_checked'] = True
         self._config['apis'][api_index]['expires'] = time.time() + \
             86400  # 24小时后过期
         self.save_config()
@@ -338,7 +344,7 @@ class acme_v2:
         res = self.acme_request(self._apis['revokeCert'], payload)
         if res.status_code in [200, 201]:
             if os.path.exists(cert_path):
-                public.ExecShell("rm -rf {}".format(cert_path))
+                public.Rm(cert_path)
             del(self._config['orders'][index])
             self.save_config()
             return public.returnMsg(True, "证书吊销成功!")
@@ -424,7 +430,7 @@ class acme_v2:
         return apply_domains
 
     # 创建订单
-    def create_order(self, domains, auth_type, auth_to, index=None):
+    def create_order(self, domains, auth_type, auth_to, index=None, replaces=None):
         domains = self.format_domains(domains)
         if not domains:
             raise Exception("至少需要有一个域名或者IP")
@@ -449,17 +455,29 @@ class acme_v2:
                 raise Exception("IP地址只能使用HTTP文件验证方式申请证书!")
 
         # 请求创建订单
+        # ARI续签订单需要携带旧证书ID，CA可据此识别这是替换已有证书。
+        if replaces and self._apis and self._apis.get('renewalInfo'):
+            payload['replaces'] = replaces
         res = self.acme_request(self._apis['newOrder'], payload)
         if not res.status_code in [201,200]:  # 如果创建失败
             e_body = res.json()
-            if 'type' in e_body:
+            if replaces and 'replaces' in payload:
+                e_type = str(e_body.get('type', ''))
+                e_detail = str(e_body.get('detail', ''))
+                if 'alreadyReplaced' in e_type or 'replaces' in e_detail or 'ari' in e_detail.lower():
+                    write_log("|-ARI续签: CA拒绝replaces参数，正在去掉replaces后重试创建订单。")
+                    payload.pop('replaces', None)
+                    res = self.acme_request(self._apis['newOrder'], payload)
+                    if not res.status_code in [201, 200]:
+                        e_body = res.json()
+            if not res.status_code in [201,200] and 'type' in e_body:
                 # 如果随机数失效
                 if e_body['type'].find('error:badNonce') != -1:
                     self.get_nonce(force=True)
                     res = self.acme_request(self._apis['newOrder'], payload)
 
                 # 如果帐户失效
-                if e_body['detail'].find('KeyID header contained an invalid account URL') != -1:
+                if e_body.get('detail', '').find('KeyID header contained an invalid account URL') != -1:
                     k = self._mod_index[self._debug]
                     del(self._config['account'][k])
                     self.get_kid()
@@ -619,6 +637,194 @@ class acme_v2:
         replay_nonce = res.headers.get('Replay-Nonce')
         if replay_nonce:
             self._replay_nonce = replay_nonce
+
+    def _parse_ari_time(self, value):
+        # 解析ARI接口返回的RFC3339时间，统一转成本地时间戳，便于和time.time()比较。
+        if not value:
+            return None
+        value = str(value).strip()
+        if value.endswith('Z'):
+            value = value[:-1] + '+00:00'
+        try:
+            return int(datetime.datetime.fromisoformat(value).timestamp())
+        except:
+            pass
+        for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f%z"):
+            try:
+                return int(datetime.datetime.strptime(value, fmt).timestamp())
+            except:
+                continue
+        return None
+
+    def _parse_retry_after(self, value):
+        # Retry-After可能是秒数，也可能是HTTP日期；返回None表示响应头不存在或格式无效。
+        if not value:
+            return None
+        value = str(value).strip()
+        try:
+            return int(time.time()) + int(value)
+        except:
+            pass
+        try:
+            import email.utils
+            retry_dt = email.utils.parsedate_to_datetime(value)
+            return int(retry_dt.timestamp())
+        except:
+            return None
+
+    def _int_to_der_serial_bytes(self, serial_number):
+        # ARI证书ID里的序列号使用证书里的DER整数编码，而不是十进制字符串。
+        if serial_number < 0:
+            return None
+        if serial_number == 0:
+            return b'\x00'
+        serial_hex = "{:x}".format(serial_number)
+        if len(serial_hex) % 2:
+            serial_hex = "0" + serial_hex
+        serial_bytes = binascii.unhexlify(serial_hex)
+        if serial_bytes[0] & 0x80:
+            serial_bytes = b'\x00' + serial_bytes
+        return serial_bytes
+
+    def get_ari_cert_id(self, pem_data):
+        # RFC 9773: certID = base64url(AKI keyIdentifier) + "." + base64url(serialNumber)
+        try:
+            if isinstance(pem_data, bytes):
+                pem_data = pem_data.decode('utf-8')
+            from cryptography import x509
+            from cryptography.hazmat.backends import default_backend
+            from cryptography.x509.oid import ExtensionOID
+            leaf_match = re.search(
+                r"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----",
+                pem_data,
+                re.S
+            )
+            if not leaf_match:
+                return None
+            cert = x509.load_pem_x509_certificate(leaf_match.group(0).encode(), default_backend())
+            aki = cert.extensions.get_extension_for_oid(
+                ExtensionOID.AUTHORITY_KEY_IDENTIFIER
+            ).value.key_identifier
+            serial = self._int_to_der_serial_bytes(cert.serial_number)
+            if not aki or not serial:
+                return None
+            return "{}.{}".format(self.calculate_safe_base64(aki), self.calculate_safe_base64(serial))
+        except:
+            write_log("|-ARI续签: 生成证书ID失败，将使用普通续签策略。")
+            return None
+
+    def get_local_cert_pem(self, ssl_hash, cert_data):
+        # 优先从证书管理记录的保存路径读取，其次兼容ssl_saved目录里的本地证书。
+        paths = []
+        if cert_data.get('path'):
+            paths.append(os.path.join(cert_data.get('path'), 'fullchain.pem'))
+        paths.append("vhost/ssl_saved/{}/fullchain.pem".format(ssl_hash))
+        for pem_file in paths:
+            if pem_file and os.path.exists(pem_file):
+                pem_data = public.readFile(pem_file)
+                if pem_data:
+                    return pem_data
+        return None
+
+    def get_ari_renewal_info(self, cert_id):
+        # 查询CA给出的ARI建议续签窗口。该接口是普通GET，不需要JWS签名。
+        if not self._apis or not self._apis.get('renewalInfo') or not cert_id:
+            return None
+        renewal_url = "{}/{}".format(self._apis['renewalInfo'].rstrip('/'), cert_id)
+        headers = {"User-Agent": self._user_agent, "Accept": "application/json"}
+        res = requests.get(
+            renewal_url,
+            timeout=self._acme_timeout,
+            headers=headers,
+            verify=self._verify,
+            s_type=self._request_type
+        )
+        if res.status_code != 200:
+            write_log("|-ARI续签: 获取建议续签时间失败，响应状态码: {}。".format(res.status_code))
+            return None
+        try:
+            data = res.json()
+        except:
+            write_log("|-ARI续签: 建议续签时间接口返回的JSON格式错误。")
+            return None
+        window = data.get('suggestedWindow') or {}
+        start_time = self._parse_ari_time(window.get('start'))
+        end_time = self._parse_ari_time(window.get('end'))
+        if not start_time or not end_time or end_time <= start_time:
+            write_log("|-ARI续签: CA返回的建议续签窗口无效，将使用普通续签策略。")
+            return None
+        data['start_time'] = start_time
+        data['end_time'] = end_time
+        data['retry_after'] = self._parse_retry_after(res.headers.get('Retry-After'))
+        return data
+
+    def should_renew_by_ari(self, ssl_hash, cert_id):
+        # 根据ARI缓存和Retry-After控制renewalInfo查询频率；没有Retry-After时每天查询一次。
+        if not cert_id or not self._apis or not self._apis.get('renewalInfo'):
+            return None
+        now = int(time.time())
+        if not self._config.get('ari'):
+            self._config['ari'] = {}
+        cached = self._config['ari'].get(ssl_hash, {})
+        if cached.get('cert_id') == cert_id:
+            renew_at = int(cached.get('renew_at') or 0)
+            cached_retry_after = int(cached.get('retry_after') or 0)
+            ari_check_after = int(cached.get('ari_check_after') or cached_retry_after or 0)
+            if not cached_retry_after and ari_check_after > now + 86400:
+                ari_check_after = 0
+            if renew_at and renew_at <= now:
+                return {"renew": True, "cert_id": cert_id, "used": True}
+            if renew_at > now and ari_check_after > now:
+                write_log("|-ARI续签: 未到建议续签时间，本地计划续签时间: {}，下次查询建议时间: {}。".format(
+                    time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(renew_at)),
+                    time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ari_check_after))
+                ))
+                return {"renew": False, "cert_id": cert_id, "used": True}
+
+        ari_info = self.get_ari_renewal_info(cert_id)
+        if not ari_info:
+            return None
+
+        start_time = int(ari_info['start_time'])
+        end_time = int(ari_info['end_time'])
+        renew_at = int(cached.get('renew_at') or 0)
+        if (
+                cached.get('cert_id') != cert_id
+                or int(cached.get('start_time') or 0) != start_time
+                or int(cached.get('end_time') or 0) != end_time
+                or renew_at < start_time
+                or renew_at > end_time
+        ):
+            renew_at = random.SystemRandom().randint(start_time, end_time)
+
+        retry_after = ari_info.get('retry_after')
+        if retry_after:
+            ari_check_after = int(retry_after)
+        else:
+            # CA未返回Retry-After时，按每天一次的频率重新查询建议续签窗口。
+            ari_check_after = now + 86400
+
+        self._config['ari'][ssl_hash] = {
+            "cert_id": cert_id,
+            "start_time": start_time,
+            "end_time": end_time,
+            "renew_at": renew_at,
+            "retry_after": int(retry_after or 0),
+            "ari_check_after": ari_check_after,
+            "explanationURL": ari_info.get('explanationURL', '')
+        }
+        self.save_config()
+
+        if now >= renew_at or now >= end_time:
+            write_log("|-ARI续签: 已到达建议续签时间，开始续签。")
+            return {"renew": True, "cert_id": cert_id, "used": True}
+        write_log("|-ARI续签: CA建议窗口为 {} 至 {}，本地计划续签时间为 {}，下次查询建议时间为 {}，本次跳过。".format(
+            time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time)),
+            time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(end_time)),
+            time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(renew_at)),
+            time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(ari_check_after))
+        ))
+        return {"renew": False, "cert_id": cert_id, "used": True}
 
     # 设置验证信息
     def set_auth_info(self, identifier_auth, index=None):
@@ -1983,11 +2189,12 @@ fullchain.pem       粘贴到证书输入框
     # 写配置文件
     def save_config(self):
         fp = open(self._conf_file_v2, 'w+')
-        fcntl.flock(fp, fcntl.LOCK_EX)  # 加锁
-        fp.write(json.dumps(self._config))
-        fcntl.flock(fp, fcntl.LOCK_UN)  # 解锁
-        fp.close()
-        return True
+        try:
+            fcntl.flock(fp, fcntl.LOCK_EX)
+            fp.write(json.dumps(self._config))
+        finally:
+            fcntl.flock(fp, fcntl.LOCK_UN)
+            fp.close()
 
     # 读配置文件
     def read_config(self):
@@ -2120,8 +2327,8 @@ fullchain.pem       粘贴到证书输入框
 
         # 是否为指定站点
         count = public.M('sites').where(
-            'id=? and project_type in (?,?,?,?)',
-            (args.id, 'Java', 'Go', 'Other', "Python")
+            'id=? and project_type in (?,?,?,?,?)',
+            (args.id, 'Java', 'Go', 'Other', "Python", "AI")
         ).count()
         if count:
             try:
@@ -2408,7 +2615,7 @@ fullchain.pem       粘贴到证书输入框
             return False
 
 
-    def renew_cert_to(self,domains,auth_type,auth_to,index = None):
+    def renew_cert_to(self,domains,auth_type,auth_to,index = None,replaces = None):
         siteName = None
         cert = {}
         if os.path.exists(auth_to):
@@ -2443,7 +2650,8 @@ fullchain.pem       粘贴到证书输入框
                 domains,
                 auth_type,
                 auth_to.replace('//','/'),
-                index
+                index,
+                replaces
             )
 
             write_log("|-正在获取验证信息..")
@@ -2674,8 +2882,40 @@ fullchain.pem       粘贴到证书输入框
             if ca not in ("Let's Encrypt", "TrustAsia Technologies, Inc."):
                 write_log("|-【{}】非Let's Encrypt或TrustAsia证书，无法续签，请尝试手动续签!".format(ssl_hash))
                 continue
+            write_log("|-开始续签 {} 证书".format(ca))
             # 计算 30 天后的日期
-            if cycle:
+            ari_cert_id = None
+            ari_used = False
+            ari_can_check = True
+            try:
+                ari_can_check = datetime.datetime.strptime(cert_info['notAfter'][:10], "%Y-%m-%d").timestamp() > time.time()
+            except:
+                pass
+            try:
+                if not ari_can_check:
+                    write_log("|-ARI续签: 当前证书已过期，将使用普通续签策略。")
+                    raise StopIteration()
+                self.get_apis()
+                if self._apis.get('renewalInfo'):
+                    # 只有CA支持ARI且未传入强制cycle时，才按CA建议窗口判断自动续签时间。
+                    cert_pem = self.get_local_cert_pem(ssl_hash, cert_data)
+                    if cert_pem:
+                        ari_cert_id = self.get_ari_cert_id(cert_pem)
+                    if ari_cert_id and not cycle:
+                        ari_result = self.should_renew_by_ari(ssl_hash, ari_cert_id)
+                        if ari_result and ari_result.get('used'):
+                            ari_used = True
+                            if not ari_result.get('renew'):
+                                continue
+                else:
+                    write_log("|-ARI续签: 当前CA目录不支持renewalInfo，将使用普通续签策略。")
+            except StopIteration:
+                pass
+            except Exception as e:
+                write_log("|-ARI续签: 检查建议续签时间失败，将使用普通续签策略: {}".format(str(e)))
+            if ari_used:
+                pass
+            elif cycle:
                 cycle = int(cycle)
                 # 计算 30 天后的日期
                 future_date = (datetime.datetime.now().date() + datetime.timedelta(days=cycle)).strftime('%Y-%m-%d')
@@ -2723,7 +2963,7 @@ fullchain.pem       粘贴到证书输入框
             if set(auth_domains) == set(cert_info['dns']):
                 write_log("|-【{}】全部域名已绑定dns-api，正在尝试使用dns验证续签!".format(ssl_hash))
                 self.get_apis()
-                cert = self.renew_cert_to(auth_domains, "dns", "dns-api")
+                cert = self.renew_cert_to(auth_domains, "dns", "dns-api", replaces=ari_cert_id)
                 if cert.get('status') is False:
                     continue
                 public.M('ssl_info').where('hash=?', ssl_hash).update({"ps": "renewed"})
@@ -2757,7 +2997,7 @@ fullchain.pem       粘贴到证书输入框
             if http_auth:
                 write_log("|-【{}】正在尝试使用文件验证续签!".format(ssl_hash))
                 self.get_apis()
-                cert = self.renew_cert_to(domains, "http", site_info['path'])
+                cert = self.renew_cert_to(domains, "http", site_info['path'], replaces=ari_cert_id)
                 if cert.get('status') is False:
                     continue
                 public.M('ssl_info').where('hash=?', ssl_hash).update({"ps": "renewed"})
@@ -2765,7 +3005,7 @@ fullchain.pem       粘贴到证书输入框
             elif dns_auth:
                 write_log("|-【{}】正在尝试使用dns验证续签!".format(ssl_hash))
                 self.get_apis()
-                cert = self.renew_cert_to(auth_domains, "dns", "dns-api")
+                cert = self.renew_cert_to(auth_domains, "dns", "dns-api", replaces=ari_cert_id)
                 if cert.get('status') is False:
                     continue
                 public.M('ssl_info').where('hash=?', ssl_hash).update({"ps": "renewed"})

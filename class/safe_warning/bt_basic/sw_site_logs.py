@@ -63,7 +63,7 @@ def check_run():
             not_logs.append(s['name'])
 
     if not_logs:
-        return False ,'以下网站日志保存周期不合规: <br />' + ('<br />'.join(not_logs))
+        return False ,'以下网站日志保存周期不合规: <br/>' + ('<br/>'.join(not_logs))
 
     return True,'无风险'
 

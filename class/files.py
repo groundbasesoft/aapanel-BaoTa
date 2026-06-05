@@ -4052,6 +4052,9 @@ cd %s
     def GetSearch(self, get):
         if not os.path.exists(get.path):
             return public.returnMsg(False, 'DIR_NOT_EXISTS')
+        #检查search 参数是否合法，防止命令注入 
+        if re.search(r"[;&|#'\"`]", get.search):
+            return public.returnMsg(False, '搜索关键词包含非法字符!')
         return public.ExecShell("find " + get.path + " -name '*" + get.search + "*'")
 
     # 保存草稿
@@ -4213,6 +4216,163 @@ cd %s
             data = []
         self.set_store_data(data)
         return public.returnMsg(True, '删除成功!')
+
+    # ======================================================================
+    # 应用打开方式（Open With）
+    #
+    # 功能：为文件管理中的各类文件扩展名关联默认打开程序，类似 Windows
+    #       「打开方式」功能。前端在文件列表右键菜单中展示可选应用列表。
+    #
+    # 数据文件（双文件机制，解决升级覆盖问题）：
+    #   data/app_open.default.json  — 面板内置预设（发版时更新，升级时会被覆盖）
+    #                                   新增应用或格式时，修改此文件即可
+    #   data/app_open.json          — 用户配置（升级时保留，不受更新影响）
+    #                                   首次访问时自动从 default 创建，
+    #                                   用户通过 set_app_open 修改的内容保存在此
+    #
+    # 结构说明（修改 data/app_open.default.json 即可扩展，无需改动代码）：
+    #   apps:    应用注册表
+    #            {app_id: {name: "显示名", cmd: "路由命令", icon: "图标名"}}
+    #            例: {"monaco": {name: "Monaco Editor", cmd: "Monaco", icon: "code"}}
+    #   formats: 格式注册表
+    #            {ext: {name: "格式名", group: ["分类"], apps: ["兼容app_id"], app_id: "当前选中"}}
+    #            例: {"txt": {name: "文本文件", group: ["code"], apps: ["editor","monaco"], app_id: "editor"}}
+    #   group 字段用于前端分组筛选，apps 是兼容列表，app_id 是当前选中项（必须在 apps 中）。
+    #
+    # 路由注册：BTPanel/__init__.py 的 filesObject 白名单中
+    # 接口：
+    #   GET  /files?action=get_app_open&ext=txt  → 查询后缀的当前打开方式
+    #   POST /files?action=set_app_open&ext=txt&app_id=monaco  → 修改打开方式
+    #
+    # 扩展指引：
+    #   1. 新增应用 → data/app_open.default.json 的 apps 中添加条目
+    #   2. 新增格式 → 同上 formats 中添加，apps 字段列出兼容的应用 ID
+    #   3. 新增接口 → 在此区域添加方法，同时在 BTPanel/__init__.py 注册路由
+    # ======================================================================
+
+    __app_open_file = 'data/app_open.json'               # 用户配置，升级不受影响
+    __app_open_default = 'data/app_open.default.json'    # 面板内置预设，发版时更新
+
+    def __get_app_open_data(self):
+        """
+        读取用户配置
+        存在直接读取，不存在则从预设 default 创建
+        若读取结果异常（空数据/解析失败），自动从 default 恢复
+        @return dict  {"apps": {...}, "formats": {...}}
+        """
+        data = None
+        if os.path.exists(self.__app_open_file):
+            try:
+                data = json.loads(public.readFile(self.__app_open_file))
+            except:
+                pass
+
+        # 用户配置有效 → 直接返回
+        if data and isinstance(data, dict) and (data.get("apps") or data.get("formats")):
+            return data
+
+        # 用户配置无效/不存在 → 从默认模板初始化
+        default_data = {"apps": {}, "formats": {}}
+        if os.path.exists(self.__app_open_default):
+            try:
+                default_data = json.loads(public.readFile(self.__app_open_default))
+            except:
+                pass
+        if default_data.get("apps") or default_data.get("formats"):
+            self.__save_app_open_data(default_data)
+        return default_data
+
+    def __save_app_open_data(self, data):
+        """
+        持久化配置到 data/app_open.json（用户配置，升级时不受影响）
+        @param data: dict  完整的 {"apps": ..., "formats": ...} 结构
+        """
+        public.writeFile(self.__app_open_file, json.dumps(data, ensure_ascii=False, indent=2))
+        return True
+
+    def get_app_open(self, get):
+        """
+        查询文件后缀的打开方式
+        传 ext 查单个后缀，不传 ext 返回全部配置
+        @param get.ext: str  文件后缀，如 "txt"（可选，不带点，大小写不敏感）
+        @return dict
+        """
+        try:
+            ext = str(getattr(get, 'ext', '')).strip().lower()
+            data = self.__get_app_open_data()
+
+            # 不传 ext → 返回全部配置
+            if not ext:
+                apps_list = []
+                for app_id, info in data.get("apps", {}).items():
+                    apps_list.append({
+                        "id": app_id,
+                        "name": info.get("name", app_id),
+                        "cmd": info.get("cmd", ""),
+                        "icon": info.get("icon", ""),
+                        "count": sum(1 for fmt in data.get("formats", {}).values()
+                                     if app_id in fmt.get("apps", [])),
+                    })
+                apps_list.sort(key=lambda x: x["name"])
+                formats_list = []
+                for ext_name, info in data.get("formats", {}).items():
+                    app_info = data.get("apps", {}).get(info.get("app_id"), {})
+                    formats_list.append({
+                        "ext": ext_name,
+                        "name": info.get("name", ext_name),
+                        "group": info.get("group", []),
+                        "icon": info.get("icon", ""),
+                        "apps": info.get("apps", []),
+                        "app_id": info.get("app_id"),
+                        "app_name": app_info.get("name", info.get("app_id")),
+                    })
+                formats_list.sort(key=lambda x: x["ext"])
+                return public.returnMsg(True, {"apps": apps_list, "formats": formats_list})
+
+            # 传 ext → 查单个
+            fmt = data.get("formats", {}).get(ext)
+            if not fmt:
+                return public.returnMsg(False, '不支持的文件格式')
+            app_id = fmt.get("app_id")
+            app_info = data.get("apps", {}).get(app_id, {})
+            return public.returnMsg(True, {
+                "ext": ext,
+                "name": fmt.get("name", ext),
+                "app_id": app_id,
+                "app_name": app_info.get("name", ""),
+                "cmd": app_info.get("cmd", ""),
+                "icon": app_info.get("icon", ""),
+                "apps": fmt.get("apps", []),
+            })
+        except:
+            public.WriteLog('TYPE_FILE', '获取打开方式配置异常', ())
+            return public.returnMsg(False, '获取打开方式配置失败')
+
+    def set_app_open(self, get):
+        """
+        设置指定文件后缀的打开方式
+        @param get.ext:     str  文件后缀，如 "txt"（不带点）
+        @param get.app_id:  str  应用 ID（必须在 data/app_open.json 的 apps 中存在）
+        @return dict  {"status": true/false, "msg": "..."}
+        """
+        try:
+            ext = str(getattr(get, 'ext', '')).strip().lower()
+            app_id = str(getattr(get, 'app_id', '')).strip()
+            if not ext:
+                return public.returnMsg(False, '请指定文件后缀')
+            if not app_id:
+                return public.returnMsg(False, '请指定打开方式')
+            data = self.__get_app_open_data()
+            if ext not in data.get("formats", {}):
+                return public.returnMsg(False, '不支持的文件格式')
+            if app_id not in data.get("apps", {}):
+                return public.returnMsg(False, '不支持的打开方式')
+            data["formats"][ext]["app_id"] = app_id
+            self.__save_app_open_data(data)
+            return public.returnMsg(True, '设置成功')
+        except:
+            public.WriteLog('TYPE_FILE', '设置打开方式配置异常', ())
+            return public.returnMsg(False, '设置打开方式失败')
 
     # 单文件木马扫描
     def file_webshell_check(self, get):
@@ -4560,6 +4720,9 @@ cd %s
 
     # 执行git
     def exec_git(self, get):
+        #检查URL合法性
+        if not re.match(r'^(https?|git|ssh|ftp|ftps)://[^\s/$.?#].[^\s]*$', get.giturl):
+            return public.returnMsg(False, '请输入合法的Git仓库URL!') 
         if get.git_action == 'option':
             public.ExecShell("nohup {} &> /tmp/panelExec.pl &".format(get.giturl))
         else:

@@ -1,1 +1,0 @@
-import{c as a,b1 as r,e as n,m as p,b2 as c,i}from"./base-lib.js?v=1776335489";function s(e){return typeof e=="function"||Object.prototype.toString.call(e)==="[object Object]"&&!i(e)}const m=a({name:"BtRate",props:{...r},setup(e,{attrs:o,slots:t}){return()=>n(c,p(o,e),s(t)?t:{default:()=>[t]})}});export{m as B};

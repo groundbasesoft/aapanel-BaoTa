@@ -139,7 +139,8 @@ assistant: "I'm going to use the Task tool to launch the with the greeting-respo
     agent_def = agent_registry.get(subagent_type)
     if not agent_def:
         available = [a.name for a in agent_registry.list_agents()]
-        return _xml_response("error", f"Unknown agent type: '{subagent_type}'. Available agents: {', '.join(available)}")
+        parent_session = kwargs.get("session_id")
+        return _xml_response("Task", "error", f"Unknown agent type: '{subagent_type}'. Available agents: {', '.join(available)}")
 
     # 2. Session Management
     if task_id:
@@ -158,6 +159,7 @@ assistant: "I'm going to use the Task tool to launch the with the greeting-respo
     # Get parent config if available
     parent_config = kwargs.get("parent_config", {})
     parent_session_id = kwargs.get("parent_session_id")
+    session_id_for_response = kwargs.get("session_id")
     
     # Start with default base config
     config = {
@@ -193,38 +195,62 @@ assistant: "I'm going to use the Task tool to launch the with the greeting-respo
     # 4. Initialize Agent
     agent = Agent(session_id=session_id, config=config)
     
-    try:
-        # 5. Execute Agent Loop
-        # Agent.chat is a generator. We need to consume it to let the agent run.
-        # We collect the final response content.
-        
-        full_response = ""
-        
-        # Add a clear instruction to the prompt
-        full_prompt = f"Task: {description}\n\nInstructions:\n{prompt}"
-        
-        generator = agent.chat(full_prompt)
-        
-        for chunk in generator:
-            if chunk.get("type") == "content":
-                full_response += chunk.get("response", "")
-            elif chunk.get("type") == "error":
-                return _xml_response("error", f"Agent error: {chunk.get('data')}")
-                
-        # 6. Return Result
-        output = [
-            f"task_id: {session_id}",
-            "",
-            "<task_result>",
-            full_response,
-            "</task_result>"
-        ]
-        
-        return _xml_response("done", "\n".join(output))
+    # 5. 内部 generator：按事件边界缓冲并流式推送子代理输出
+    # Task 保持普通函数（验证失败可 return 字符串），通过 return _execute() 返回 generator
+    def _execute():
+        # content_buffer: 累积子代理的文本 delta，遇到事件边界时一次性 flush 完整文本
+        # last_round_content: 记录最近一轮迭代（meta_info 标记）的文本，循环结束后即为最终总结
+        content_buffer = ""
+        last_round_content = ""
 
-    except Exception as e:
-        return _xml_response("error", f"Task execution failed: {str(e)}")
-    finally:
-        # Clean up agent resources
-        if hasattr(agent, "close"):
-            agent.close()
+        try:
+            full_prompt = f"Task: {description}\n\nInstructions:\n{prompt}"
+
+            for chunk in agent.chat(full_prompt):
+                chunk_type = chunk.get("type")
+
+                # 文本 delta 只累积不立即推送，等事件边界时再 flush
+                if chunk_type == "content":
+                    content_buffer += chunk.get("response", "")
+                    continue
+
+                # meta_info 标记一轮迭代结束，先保存当前轮文本（最终总结 = 最后一轮）
+                # 必须在 flush 之前执行，否则 content_buffer 已被清空
+                if chunk_type == "meta_info":
+                    if content_buffer:
+                        last_round_content = content_buffer
+
+                # 遇到非 content 事件边界，先 flush 已累积的文本
+                if content_buffer:
+                    yield {"type": "subtask_stream", "task_id": session_id,"chunk": {"type": "content", "text": content_buffer}}
+                    content_buffer = ""
+
+                # 工具调用前后各推送一次，方便前端展示 AI 正在做什么
+                if chunk_type == "tool_call":
+                    yield {"type": "subtask_stream", "task_id": session_id,"chunk": {"type": "tool_call", "tool": chunk.get("tool"),"args": chunk.get("args"), "id": chunk.get("id")}}
+                elif chunk_type == "tool_result":
+                    yield {"type": "subtask_stream", "task_id": session_id,"chunk": {"type": "tool_result", "tool": chunk.get("tool"),"result": chunk.get("result"), "id": chunk.get("id")}}
+                elif chunk_type == "meta_info":
+                    pass
+                elif chunk_type == "error":
+                    yield {"type": "subtask_stream", "task_id": session_id,"chunk": {"type": "error", "data": chunk.get("data")}}
+                    return
+                elif chunk_type == "stop":
+                    yield {"type": "subtask_stream", "task_id": session_id,"chunk": {"type": "stop"}}
+
+            # 循环结束后 flush 剩余文本
+            if content_buffer:
+                yield {"type": "subtask_stream", "task_id": session_id,"chunk": {"type": "content", "text": content_buffer}}
+
+            # 工具链只需最终总结内容，不包含中间过程
+            final_text = last_round_content if last_round_content else content_buffer
+            output = [f"task_id: {session_id}", "","<task_result>", final_text, "</task_result>"]
+            yield {"type": "subtask_done", "task_id": session_id,"result": _xml_response("Task", "done", "\n".join(output))}
+
+        except Exception as e:
+            yield {"type": "subtask_done", "task_id": session_id,"result": _xml_response("Task", "error", f"Task execution failed: {str(e)}")}
+        finally:
+            if hasattr(agent, "close"):
+                agent.close()
+
+    return _execute()

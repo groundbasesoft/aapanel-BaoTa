@@ -115,13 +115,15 @@ from projectModel.pythonModel import main as pythonMod
 from projectModel.nodejsModel import main as nodejsMod
 from projectModel.otherModel import main as otherMod
 from projectModel.goModel import main as goMod
+from projectModel.htmlModel import main as htmlMod
 
 mods = {
     "java": javaMod(),
     "python": pythonMod(),
     "node": nodejsMod(),
     "other": otherMod(),
-    "go": goMod()
+    "go": goMod(),
+    "html": htmlMod()
 }
 
 for site in edateSites:
@@ -155,6 +157,9 @@ for site in edateSites:
 
         if site['project_type'] == "Other":
             mods["other"].stop_project(get)
+
+        if site['project_type'] == "html":
+            mods["html"].SiteStop(get)
     except:
         public.debug_log()
 

@@ -2,6 +2,7 @@ import json
 import uuid
 from typing import Generator, List, Dict, Any, Union
 import openai
+import public
 from mod.project.agent.chat_client.memory import MemoryManager
 from mod.project.agent.chat_client.tools import registry
 
@@ -13,7 +14,8 @@ class SimpleAgent:
         
         # 提取配置
         self.api_key = self.config.get("api_key")
-        self.base_url = self.config.get("base_url")
+        base_url = self.config.get("base_url")
+        self.base_url = public.get_home_node(base_url) if base_url and 'bt.cn' in base_url else base_url
         self.model_name = self.config.get("model_name")
         # 简单Agent通常不需要复杂的工具迭代，但为了兼容性保留基本配置读取，虽然不使用工具
         self.default_headers = self.config.get("default_headers", {})
@@ -33,7 +35,8 @@ class SimpleAgent:
         self.memory = MemoryManager(
             session_id=session_id,
             sessions_dir=self.config.get("sessions_dir", "sessions"),
-            sliding_window_size=self.config.get("sliding_window_size", 100)
+            sliding_window_size=self.config.get("sliding_window_size", 100),
+            model_name=self.model_name
         )
         
         self.client = openai.OpenAI(
@@ -57,14 +60,8 @@ class SimpleAgent:
             # 生成 ID
             user_msg_id = str(uuid.uuid4())
             ai_msg_id = str(uuid.uuid4())
-
-            yield {
-                "type": "meta_info",
-                "user_msg_id": user_msg_id,
-                "ai_msg_id": ai_msg_id
-            }
             
-            # 提取纯文本用于检索
+            # 处理文件引用
             user_text = user_input
             if isinstance(user_input, list):
                 text_parts = []
@@ -95,6 +92,13 @@ class SimpleAgent:
             while iteration_count < max_tool_iterations:
                 iteration_count += 1
                 
+                # Reset last_loop_tokens for this iteration
+                last_loop_tokens = {
+                    "total_tokens": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0
+                }
+                
                 response_stream = self.client.chat.completions.create(
                     model=self.model_name,
                     messages=messages,
@@ -115,6 +119,10 @@ class SimpleAgent:
                     # 结束判断
                     if not chunk.choices:
                         if chunk.usage:
+                            last_loop_tokens["total_tokens"] = chunk.usage.total_tokens
+                            last_loop_tokens["input_tokens"] = chunk.usage.prompt_tokens
+                            last_loop_tokens["output_tokens"] = chunk.usage.completion_tokens
+                            
                             yield {
                             "type": "stop",
                             "usage": {
@@ -277,6 +285,21 @@ class SimpleAgent:
                     kwargs["reasoning_content"] = full_reasoning_content
                 
                 self.memory.add_message("assistant", full_response_content, id=ai_msg_id, **kwargs)
+                
+                # 更新 meta.json 中的 token 使用量
+                self.memory.update_meta_tokens(
+                    total_tokens=last_loop_tokens["total_tokens"],
+                    input_tokens=last_loop_tokens["input_tokens"],
+                    output_tokens=last_loop_tokens["output_tokens"]
+                )
+                
+                # 发送 meta_info 包含 ID 和最后一次 agent loop 的 token 使用
+                yield {
+                    "type": "meta_info",
+                    "user_msg_id": user_msg_id,
+                    "ai_msg_id": ai_msg_id,
+                    "last_loop_tokens": last_loop_tokens
+                }
                 
         except openai.AuthenticationError:
             yield {"type": "error", "data": "API密钥错误或无效，请检查密钥是否正确"}

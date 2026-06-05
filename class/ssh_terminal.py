@@ -21,7 +21,6 @@ import ipaddress
 import traceback
 import tempfile
 from itertools import chain
-
 import fcntl
 import select
 import termios
@@ -1728,6 +1727,8 @@ class ssh_host_admin(ssh_terminal):
         '''
         args.new_host = args.new_host.strip()
         args.host = args.host.strip()
+        if not self.check_host(args.new_host):
+            return public.returnMsg(False, 'IP或域名格式错误')
         old_host_path = self._save_path + args.new_host + "_" + args.port + '/info.json'
         if old_type:
             old_host_path = self._save_path + args.new_host + '/info.json'
@@ -1765,12 +1766,49 @@ class ssh_host_admin(ssh_terminal):
         # if not result['status']: return result
         self.save_ssh_info(args.host, host_info, self._save_path + args.new_host + "_" + args.port)
         if old_type:
-            import shutil
+            
             shutil.rmtree(os.path.dirname(old_host_path))
         if args.host != args.new_host:
-            public.ExecShell('mv {} {}'.format(old_host_path, new_host_path))
+            #public.ExecShell('mv {} {}'.format(old_host_path, new_host_path))
+            shutil.move(old_host_path, new_host_path)
         public.WriteLog(self._log_type, '修改HOST:{}的SSH信息'.format(args.host))
         return public.returnMsg(True, '修改成功')
+
+    def is_domain(self,domain):
+        """
+        严格验证标准域名格式（符合 ICANN 规范）
+        支持：普通域名、多级子域名、国内域名、国际后缀
+        不支持：带*号的泛域名、IP地址、邮箱域名
+        """
+        if not domain or len(domain) > 253:
+            return False
+        pattern = (
+            r'^(?![-])'                                  # 不能以 - 开头
+            r'[a-zA-Z0-9_-]{1,63}'                       # 一级标签
+            r'(\.[a-zA-Z0-9_-]{1,63})*$'                 # 多级子域名
+        )
+        if not re.fullmatch(pattern, domain):
+            return False
+        for part in domain.split('.'):
+            if len(part) > 63 or part.endswith('-'):
+                return False
+        return True
+
+    def check_host(self, host):
+        '''
+           @检查Host 是否正确
+        '''
+        host = host.strip() if isinstance(host, str) else ''
+        if not host:
+            return False
+        check_host = host[1:-1] if host.startswith('[') and host.endswith(']') else host
+        if public.check_ip(check_host):
+            return True
+        if host.lower() == 'localhost':
+            return True
+        if self.is_domain(host):
+            return True
+        return False
 
     def create_host(self, args):
         '''
@@ -1789,6 +1827,8 @@ class ssh_host_admin(ssh_terminal):
             @return dict
         '''
         args.host = args.host.strip()
+        if not self.check_host(args.host):
+            return public.returnMsg(False, 'IP或域名格式错误')
         host_path = self._save_path + args.host + "_" + args.port
         old_type_info = self.get_ssh_info(args.host)
         if isinstance(old_type_info, dict) and old_type_info.get("host", None) == args.host and str(old_type_info.get("port", None)) == args.port:
@@ -1831,10 +1871,17 @@ class ssh_host_admin(ssh_terminal):
         '''
         args.host = args.host.strip()
         if not args.host: return public.returnMsg(False, '错误的参数')
+        if not self.check_host(args.host):
+            return public.returnMsg(False, 'IP或域名格式错误')
         host_path = self._save_path + args.host
         if not os.path.exists(host_path):
             return public.returnMsg(False, '指定SSH信息不存在!')
-        public.ExecShell("rm -rf {}".format(host_path))
+        #获取host_path 绝对路径，防止误删
+        host_path = os.path.abspath(host_path)
+        #判断host_path 是否在_save_path目录下
+        if not host_path.startswith(os.path.abspath(self._save_path)):
+            return public.returnMsg(False, '错误的参数')
+        os.remove(host_path)
         public.WriteLog(self._log_type, '删除HOST:{} SSH信息'.format(args.host))
         return public.returnMsg(True, '删除成功')
 

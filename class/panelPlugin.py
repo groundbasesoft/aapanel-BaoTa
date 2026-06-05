@@ -64,6 +64,7 @@ class panelPlugin:
     __sub_rules = []
     __dict__ = None
     __replace_rule = []
+    __plugin_name_re= re.compile(r'^[a-zA-Z0-9_\-]+$')
 
     pids = None
     ROWS = 15
@@ -878,15 +879,27 @@ class panelPlugin:
 
     # 获取插件title
     def get_dep_title(self, dependnet):
-        if not dependnet: return ''
+        if not dependnet: return dependnet
         dependnets = dependnet.split(',')
         title_list = []
         for dep in dependnets:
             if not dep: continue
-            pluginInfo = self.get_soft_find(dep)
-            if not pluginInfo: continue
-            title_list.append(pluginInfo['title'])
-        return '、'.join(title_list)
+            if dep.find('|') != -1:
+                dep_or_list = []
+                for name in dep.split('|'):
+                    pluginInfo = self.get_soft_find(name)
+                    if not isinstance(pluginInfo, dict) or not 'title' in pluginInfo:
+                        dep_or_list.append(name)
+                    else:
+                        dep_or_list.append(pluginInfo['title'])
+                title_list.append('|'.join(dep_or_list))
+            else:
+                pluginInfo = self.get_soft_find(dep)
+                if not isinstance(pluginInfo, dict) or not 'title' in pluginInfo:
+                    title_list.append(dep)
+                else:
+                    title_list.append(pluginInfo['title'])
+        return ','.join(title_list) or dependnet
 
     # 安装插件
     def install_plugin(self, get):
@@ -3893,6 +3906,11 @@ class panelPlugin:
     def input_zip(self, get):
         if not os.path.exists(get.tmp_path):
             return public.returnMsg(False, '临时文件不存在,请重新上传!')
+        if not os.path.abspath(get.tmp_path).startswith(self.__panel_path):
+            return public.returnMsg(False, '非法路径!')
+
+        if not self.__plugin_name_re.match(get.plugin_name):
+            return public.returnMsg(False, '插件名称不合法!')
         plugin_path = '/www/server/panel/plugin/' + get.plugin_name
         if not os.path.exists(plugin_path): os.makedirs(plugin_path)
         public.ExecShell("\cp -a -r " + get.tmp_path + '/* ' + plugin_path +
@@ -3923,6 +3941,8 @@ class panelPlugin:
 
     # 导出插件包
     def export_zip(self, get):
+        if not self.__plugin_name_re.match(get.plugin_name):
+            return public.returnMsg(False, '插件名称不合法!')
         plugin_path = '/www/server/panel/plugin/' + get.plugin_name
         if not os.path.exists(plugin_path):
             return public.returnMsg(False, '指定插件不存在!')

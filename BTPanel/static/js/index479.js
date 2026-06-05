@@ -1,7 +1,0 @@
-import{cR as T,_ as e,cZ as b}from"./utils-lib.js?v=1776335489";import{c as v,r as D,aK as l,g as E,e as t,aF as g,o as y,j as A,C as V,p as r,Q as L,d as o,bH as h}from"./base-lib.js?v=1776335489";import"./__commonjsHelpers__.js?v=1776335489";const w=v({__name:"index",setup(I){const s=o(()=>e(()=>import("./terminal-ai.js?v=1776335489"),__vite__mapDeps([]),import.meta.url)),u=o(()=>e(()=>import("./auto-complete.js?v=1776335489"),__vite__mapDeps([]),import.meta.url)),i=o(()=>e(()=>import("./terminal-theme.js?v=1776335489"),__vite__mapDeps([]),import.meta.url)),m=o(()=>e(()=>import("./key-config.js?v=1776335489"),__vite__mapDeps([]),import.meta.url)),a=D("aiTerminal"),_=l("showNewDot",!0),p=l("showLabelDot",!0),c=E(()=>[{label:"AI终端助手",lazy:!0,name:"aiTerminal",render:()=>t(s,null,null)},{label:"智能提示",lazy:!0,name:"smartTips",render:()=>t(u,null,null)},{label:"终端主题",name:"terminalTheme",lazy:!0,render:()=>t(i,null,null)},{label:p.value?()=>g(h,{isDot:!0},()=>"按键配置"):"按键配置",lazy:!0,name:"keyConfig",render:()=>t(m,null,null)}]);return y(()=>{_.value=!1}),(R,n)=>{const d=T;return A(),V(d,{type:"left-bg-card",modelValue:r(a),"onUpdate:modelValue":n[0]||(n[0]=f=>L(a)?a.value=f:null),options:r(c)},null,8,["modelValue","options"])}}}),z=b(w,[["__scopeId","data-v-f860fe01"]]);export{z as default};
-function __vite__mapDeps(indexes) {
-  if (!__vite__mapDeps.viteFileDeps) {
-    __vite__mapDeps.viteFileDeps = []
-  }
-  return indexes.map((i) => __vite__mapDeps.viteFileDeps[i])
-}

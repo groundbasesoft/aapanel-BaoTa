@@ -196,8 +196,8 @@ class panelSite(panelRedirect):
 
         htaccess = self.sitePath + '/.htaccess'
         if not os.path.exists(htaccess): public.writeFile(htaccess, ' ')
-        public.ExecShell('chmod -R 755 ' + htaccess)
-        public.ExecShell('chown -R www:www ' + htaccess)
+        public.Chmod(htaccess, 0o755)
+        public.Chown(htaccess, 'www', 'www')
 
         filename = self.setupPath + '/panel/vhost/apache/' + self.siteName + '.conf'
         public.writeFile(filename, conf)
@@ -757,8 +757,9 @@ include /www/server/panel/vhost/openlitespeed/proxy/BTSITENAME/*.conf
                 os.makedirs(self.sitePath)
             except Exception as ex:
                 return public.returnMsg(False, '创建根目录失败, %s' % ex)
-            public.ExecShell('chmod -R 755 ' + self.sitePath)
-            public.ExecShell('chown -R www:www ' + self.sitePath)
+            public.Chmod(self.sitePath, 0o755,"R")
+            public.Chown(self.sitePath, 'www', 'www', "R")
+
         # 非git项目时初始化站点目录文件 user.ini index.html 404...
         if get.get('deploy_type') not in ['git']:
             self.init_site_files(create_conf)
@@ -861,7 +862,7 @@ set $bt_safe_open "{}/:/tmp/";'''.format(self.sitePath)
             git = GitTools()
 
             # 校验目录文件
-            public.ExecShell('rm -rf ' + get.path + '/.htaccess')
+            public.Rm(get.path + '/.user.ini', types='rf')
             dir_contents = os.listdir(get.path)
             if len(dir_contents) != 0:
                 self.DeleteSite(public.to_dict_obj({'id': dict_obj.get('site_id'), 'webname': self.siteName,'database':1,'path':1,'ftp':1}))
@@ -938,10 +939,10 @@ set $bt_safe_open "{}/:/tmp/";'''.format(self.sitePath)
         self.__write_config(self.__proxyfile, proxyconf)
 
         m_path = self.setupPath + '/panel/vhost/nginx/proxy/' + siteName
-        if os.path.exists(m_path): public.ExecShell("rm -rf %s" % m_path)
+        if os.path.exists(m_path): public.Rm(m_path)
 
         m_path = self.setupPath + '/panel/vhost/apache/proxy/' + siteName
-        if os.path.exists(m_path): public.ExecShell("rm -rf %s" % m_path)
+        if os.path.exists(m_path): public.Rm(m_path)
 
         # 删除目录保护
         _dir_aith_file = "%s/panel/data/site_dir_auth.json" % self.setupPath
@@ -956,10 +957,10 @@ set $bt_safe_open "{}/:/tmp/";'''.format(self.sitePath)
         self.__write_config(_dir_aith_file, _dir_aith_conf)
 
         dir_aith_path = self.setupPath + '/panel/vhost/nginx/dir_auth/' + siteName
-        if os.path.exists(dir_aith_path): public.ExecShell("rm -rf %s" % dir_aith_path)
+        if os.path.exists(dir_aith_path): public.Rm(dir_aith_path)
 
         dir_aith_path = self.setupPath + '/panel/vhost/apache/dir_auth/' + siteName
-        if os.path.exists(dir_aith_path): public.ExecShell("rm -rf %s" % dir_aith_path)
+        if os.path.exists(dir_aith_path): public.Rm(dir_aith_path)
 
         # 删除重定向
         __redirectfile = "%s/panel/data/redirect.conf" % self.setupPath
@@ -969,9 +970,9 @@ set $bt_safe_open "{}/:/tmp/";'''.format(self.sitePath)
                 del redirectconf[i]
         self.__write_config(__redirectfile, redirectconf)
         m_path = self.setupPath + '/panel/vhost/nginx/redirect/' + siteName
-        if os.path.exists(m_path): public.ExecShell("rm -rf %s" % m_path)
+        if os.path.exists(m_path): public.Rm(m_path)
         m_path = self.setupPath + '/panel/vhost/apache/redirect/' + siteName
-        if os.path.exists(m_path): public.ExecShell("rm -rf %s" % m_path)
+        if os.path.exists(m_path): public.Rm(m_path)
 
         # 删除配置文件
         confPath = self.setupPath + '/panel/vhost/nginx/' + siteName + '.conf'
@@ -1015,7 +1016,7 @@ set $bt_safe_open "{}/:/tmp/";'''.format(self.sitePath)
 
         # 删除日志文件
         filename = public.GetConfigValue('logs_path') + '/' + siteName + '*'
-        public.ExecShell("rm -f " + filename)
+        public.Rm(filename)
 
         # 删除证书
         # crtPath = '/etc/letsencrypt/live/'+siteName
@@ -1697,10 +1698,10 @@ listener Default%s{
 
         import shutil
         if os.path.exists(backup_cert): shutil.rmtree(backup_cert)
-        if os.path.exists(path): shutil.move(path, backup_cert)
+        if os.path.exists(path): public.Mv(path, backup_cert)
         if os.path.exists(path): shutil.rmtree(path)
 
-        public.ExecShell('mkdir -p ' + path)
+        public.Mkdir(path, 0o755, "P")
         public.writeFile(keypath, get.key)
         public.writeFile(csrpath, get.csr)
 
@@ -2151,6 +2152,7 @@ listener SSL443 {
         if not os.path.exists(file):  file = self.setupPath + '/panel/vhost/nginx/python_' + siteName + '.conf'
         if not os.path.exists(file):  file = self.setupPath + '/panel/vhost/nginx/net_' + siteName + '.conf'
         if not os.path.exists(file):  file = self.setupPath + '/panel/vhost/nginx/html_' + siteName + '.conf'
+        if not os.path.exists(file):  file = self.setupPath + '/panel/vhost/nginx/ai_' + siteName + '.conf'
         ng_file = file
         ng_conf = public.readFile(file)
         have_nginx_conf = ng_conf is not False
@@ -2267,6 +2269,10 @@ listener SSL443 {
         if not os.path.exists(file):
             other_project = "html"
             file = self.setupPath + '/panel/vhost/apache/html_' + siteName + '.conf'
+
+        if not os.path.exists(file):
+            other_project = "ai"
+            file = self.setupPath + '/panel/vhost/apache/ai_' + siteName + '.conf'
 
         ap_conf = public.readFile(file)
         have_apache_conf = ap_conf is not False
@@ -2391,6 +2397,12 @@ listener SSL443 {
                     project_find = m.get_project_find(siteName)
                     m.set_apache_config(project_find)
 
+                if other_project == "ai":
+                    from projectModel.aiModel import main
+                    m = main()
+                    project_find = m.get_project_find(siteName)
+                    m.set_apache_config(project_find)
+
         if not have_nginx_conf and not have_apache_conf:
             return public.returnMsg(False, '没有服务器配置文件，请检查是否开启了外网映射！')
 
@@ -2458,6 +2470,8 @@ listener SSL443 {
             file = self.setupPath + '/panel/vhost/nginx/net_' + siteName + '.conf'
         if not os.path.exists(file):
             file = self.setupPath + '/panel/vhost/nginx/html_' + siteName + '.conf'
+        if not os.path.exists(file):
+            file = self.setupPath + '/panel/vhost/nginx/ai_' + siteName + '.conf'
         conf = public.readFile(file)
         if conf:
             if conf.find('ssl_certificate') == -1: return public.returnMsg(False, '当前未开启SSL')
@@ -2534,6 +2548,8 @@ listener SSL443 {
             file = self.setupPath + '/panel/vhost/nginx/net_' + siteName + '.conf'
         if not os.path.exists(file):
             file = self.setupPath + '/panel/vhost/nginx/html_' + siteName + '.conf'
+        if not os.path.exists(file):
+            file = self.setupPath + '/panel/vhost/nginx/ai_' + siteName + '.conf'
         conf = public.readFile(file)
         if conf:
             rep = "\n\s*#HTTP_TO_HTTPS_START(.|\n){1,900}#HTTP_TO_HTTPS_END"
@@ -2581,6 +2597,8 @@ listener SSL443 {
             file = self.setupPath + '/panel/vhost/nginx/net_' + siteName + '.conf'
         if not os.path.exists(file):
             file = self.setupPath + '/panel/vhost/nginx/html_' + siteName + '.conf'
+        if not os.path.exists(file):
+            file = self.setupPath + '/panel/vhost/nginx/ai_' + siteName + '.conf'
         conf = public.readFile(file)
         if conf:
             if conf.find('HTTP_TO_HTTPS_START') != -1: return True
@@ -2608,6 +2626,8 @@ listener SSL443 {
             file = self.setupPath + '/panel/vhost/nginx/net_' + siteName + '.conf'
         if not os.path.exists(file):
             file = self.setupPath + '/panel/vhost/nginx/html_' + siteName + '.conf'
+        if not os.path.exists(file):
+            file = self.setupPath + '/panel/vhost/nginx/ai_' + siteName + '.conf'
         conf = public.readFile(file)
         if conf:
             # 2026/02/25 处理部分情况下前置'\s' 与后置 '\n' 将多行合并导致的误删配置
@@ -2694,6 +2714,8 @@ listener SSL443 {
             file = self.setupPath + '/panel/vhost/apache/net_' + siteName + '.conf'
         if not os.path.exists(file):
             file = self.setupPath + '/panel/vhost/apache/html_' + siteName + '.conf'
+        if not os.path.exists(file):
+            file = self.setupPath + '/panel/vhost/apache/ai_' + siteName + '.conf'
         conf = public.readFile(file)
         if conf:
             rep = "\n<VirtualHost \*\:443>(.|\n)*<\/VirtualHost>"
@@ -2720,9 +2742,9 @@ listener SSL443 {
 
         self._del_ols_443_domain(siteName)
         partnerOrderId = '/www/server/panel/vhost/cert/' + siteName + '/partnerOrderId'
-        if os.path.exists(partnerOrderId): public.ExecShell('rm -f ' + partnerOrderId)
+        if os.path.exists(partnerOrderId): public.Rm(partnerOrderId)
         p_file = '/etc/letsencrypt/live/' + siteName + '/partnerOrderId'
-        if os.path.exists(p_file): public.ExecShell('rm -f ' + p_file)
+        if os.path.exists(p_file): public.Rm(p_file)
 
         public.WriteLog('TYPE_SITE', 'SITE_SSL_CLOSE_SUCCESS', (siteName,))
         public.serviceReload()
@@ -2762,6 +2784,8 @@ listener SSL443 {
         if not os.path.exists(file): file = self.setupPath + '/panel/vhost/' + public.get_webserver() + '/net_' + siteName + '.conf'
 
         if not os.path.exists(file): file = self.setupPath + '/panel/vhost/' + public.get_webserver() + '/html_' + siteName + '.conf'
+
+        if not os.path.exists(file): file = self.setupPath + '/panel/vhost/' + public.get_webserver() + '/ai_' + siteName + '.conf'
 
         if public.get_webserver() == "openlitespeed":
             file = self.setupPath + '/panel/vhost/' + public.get_webserver() + '/detail/' + siteName + '.conf'
@@ -2877,6 +2901,28 @@ listener SSL443 {
             # 当前未开启HTTPS防窜站
         else:
             res["https_mode"] = self.get_https_mode(None)
+        try:
+            if not os.path.exists("{}/data/ignore_upgrade_cert.pl".format(public.get_panel_path())) and cert_data:
+                if type == 3:
+                    res["upgrade_cert"] = ""
+                elif cert_data["endtime"] >= 30:
+                    res["upgrade_cert"] = ""
+                else:
+                    user_info = public.get_user_info()
+                    user_info["activity_id"] = 83
+                    act_data = public.HttpPost('https://www.bt.cn/newapi/activity/panelapi/activity_info', data=user_info,
+                                               timeout=5)
+                    act_data = json.loads(act_data)
+                    if act_data["data"][0]["detail"][0]["buy_status"] == 1:
+                        res["upgrade_cert"] = "免费SSL证书即将到期，仅需29.9元续费商用SSL证书"
+                        res["detail_id"] = act_data["data"][0]["detail"][0]["id"]
+                    else:
+                        res["upgrade_cert"] = ""
+            else:
+                res["upgrade_cert"] = ""
+        except Exception as e:
+            res["upgrade_cert"] = ""
+
         return res
 
     def set_site_ignore_https_mode(self, get):
@@ -2900,6 +2946,70 @@ listener SSL443 {
         except:
             public.print_log(public.get_error_info())
             return public.returnMsg(False, '设置失败，请检查权限!')
+
+    def set_ignore_upgrade_cert(self, get):
+        """
+        设置忽略证书升级
+        :param get:
+        :return:
+        """
+        try:
+            ignore_upgrade_cert_path = "{}/data/ignore_upgrade_cert.pl".format(public.get_panel_path())
+            if not os.path.exists(ignore_upgrade_cert_path):
+                public.writeFile(ignore_upgrade_cert_path, "ignore")
+            return public.returnMsg(True, '设置成功!')
+        except:
+            public.print_log(public.get_error_info())
+            return public.returnMsg(False, '设置失败，请检查权限!')
+
+    def create_activity_order(self, get):
+        """
+        创建活动订单
+        :param get:
+        :return:
+        """
+        try:
+            user_info = public.get_user_info()
+            user_info["detail_id"] = 37698
+            if "detail_id" in user_info and get.detail_id:
+                user_info["detail_id"] = int(get.detail_id)
+
+            act_data = public.HttpPost('https://www.bt.cn/newapi/activity/panelapi/order/create', data=user_info,
+                                       timeout=5)
+            act_data = json.loads(act_data)
+            if user_info["detail_id"] == 37698:
+                act_data["data"]["data"] = {
+                    "name": "宝塔域名型SSL证书(C5) (DV)",
+                    "year": 1,
+                    "type": "单域名",
+                    "notice":[
+                        "29.9超低价购买价值128.66元的宝塔域名型SSL证书(C5) (DV) 1年",
+                        "附赠价值200元的人工部署服务",
+                        "证书分2张签发，总共365天，首张签发后有效期是199天，临近到期前30天会自动续签。"
+                    ]
+                }
+            return act_data
+        except:
+            public.print_log(public.get_error_info())
+            return public.returnMsg(False, '订单创建失败，请稍后再试!')
+
+    def activity_payment_status(self, get):
+        """
+        活动订单支付状态查询
+        :param get:
+        :return:
+        """
+        try:
+            user_info = public.get_user_info()
+            user_info["order_no"] = get.order_no
+
+            act_data = public.HttpPost('https://www.bt.cn/newapi/activity/panelapi/order/payment_status', data=user_info,
+                                       timeout=5)
+            act_data = json.loads(act_data)
+            return act_data
+        except:
+            return public.returnMsg(False)
+
 
     def get_view_title_content(self, get):
         """
@@ -3282,7 +3392,7 @@ listener SSL443 {
         for b in binding:
             bpath = path + '/' + b['path']
             if not os.path.exists(bpath):
-                public.ExecShell('mkdir -p ' + bpath)
+                public.Mkdir(bpath, types="P")
                 public.ExecShell('ln -sf ' + path + '/index.html ' + bpath + '/index.html')
 
         sitePath = public.M('sites').where("id=?", (id,)).getField('path')
@@ -3637,9 +3747,9 @@ listener SSL443 {
                 data['dirs'] = []
                 data['binding'] = []
                 return data
-            public.ExecShell('mkdir -p ' + path)
-            public.ExecShell('chmod 755 ' + path)
-            public.ExecShell('chown www:www ' + path)
+            public.Mkdir(path, types="P")
+            public.Chmod(path, 0o755)
+            public.Chown(path, 'www', 'www')
             get.path = path
             self.SetDirUserINI(get)
             siteName = public.M('sites').where('id=?', (get.id,)).getField('name')
@@ -3946,7 +4056,7 @@ server
         # 如果没有其它域名绑定同一子目录，则删除该子目录的伪静态规则
         if not public.M('binding').where("path=? AND pid=?", (binding['path'], binding['pid'])).count():
             filename = self.setupPath + '/panel/vhost/rewrite/' + siteName + '_' + binding['path'] + '.conf'
-            if os.path.exists(filename): public.ExecShell('rm -rf %s' % filename)
+            if os.path.exists(filename): public.Rm(filename)
         # 是否需要重载服务
         if not multiple:
             public.serviceReload()
@@ -4114,8 +4224,8 @@ server
         if os.path.exists(userIni):
             public.ExecShell("chattr -i " + userIni)
         public.writeFile(userIni, 'open_basedir=' + Path + '/:/tmp/')
-        public.ExecShell('chmod 644 ' + userIni)
-        public.ExecShell('chown root:root ' + userIni)
+        public.Chmod(userIni, 0o644)
+        public.Chown(userIni, 'root', 'root')
         public.ExecShell('chattr +i ' + userIni)
         public.set_site_open_basedir_nginx(Name)
         public.serviceReload()
@@ -4511,7 +4621,7 @@ server
 
                 # proxyname_md5 = self.__calc_md5(get.proxyname)
                 # 备份并替换老虚拟主机配置文件
-                public.ExecShell("cp %s %s_bak" % (conf_path, conf_path))
+                public.Cp(conf_path, conf_path + "_bak")
                 conf = re.sub(rep, "", old_conf)
                 public.writeFile(conf_path, conf)
                 if n == 0:
@@ -4910,6 +5020,11 @@ RewriteRule ^%s(.*)$ http://%s/$1 [P,E=Proxy-Host:%s]
 
     # 保存代理配置文件
     def SaveProxyFile(self, get):
+        if 'path' not in get:
+            return public.returnMsg(False, '参数错误')
+        get.path = os.path.abspath(get.path)
+        if not get.path.startswith(self.setupPath + "/panel/vhost"):
+            return public.returnMsg(False, '非法路径')
         import files
         f = files.files()
         return f.SaveFileBody(get)
@@ -4953,18 +5068,18 @@ RewriteRule ^%s(.*)$ http://%s/$1 [P,E=Proxy-Host:%s]
                 if int(get.type) != 1:
                     if not os.path.exists(ng_conf_file):
                         return public.returnMsg(False, "请先开启反向代理后再编辑！")
-                    public.ExecShell("mv {f} {f}_bak".format(f=ap_conf_file))
-                    public.ExecShell("mv {f} {f}_bak".format(f=ng_conf_file))
-                    public.ExecShell("mv {f} {f}_bak".format(f=ols_conf_file))
+                    public.Mv(ap_conf_file, ap_conf_file + "_bak")
+                    public.Mv(ng_conf_file, ng_conf_file + "_bak")
+                    public.Mv(ols_conf_file, ols_conf_file + "_bak")
                     conf[i]["type"] = int(get.type)
                     self.__write_config(self.__proxyfile, conf)
                     public.serviceReload()
                     return public.returnMsg(True, '修改成功')
                 else:
                     if os.path.exists(ap_conf_file + "_bak"):
-                        public.ExecShell("mv {f}_bak {f}".format(f=ap_conf_file))
-                        public.ExecShell("mv {f}_bak {f}".format(f=ng_conf_file))
-                        public.ExecShell("mv {f}_bak {f}".format(f=ols_conf_file))
+                        public.Mv(ap_conf_file + "_bak", ap_conf_file)
+                        public.Mv(ng_conf_file + "_bak", ng_conf_file)
+                        public.Mv(ols_conf_file + "_bak", ols_conf_file)
                     ng_conf = public.readFile(ng_conf_file)
                     if not ng_conf:
                         return public.returnMsg(False, '配置文件读取错误')
@@ -5195,7 +5310,7 @@ location ^~ %s
         ng_proxyfile = "%s/panel/vhost/nginx/proxy/%s/%s_%s.conf" % (self.setupPath, sitename, proxyname_md5, sitename)
         ng_proxydir = "%s/panel/vhost/nginx/proxy/%s" % (self.setupPath, sitename)
         if not os.path.exists(ng_proxydir):
-            public.ExecShell("mkdir -p %s" % ng_proxydir)
+            public.MMkdir(ng_proxydir, 0o755, "P")
 
         # 构造替换字符串
         ng_subdata = ''
@@ -5245,7 +5360,7 @@ location ^~ %s
         ap_proxyfile = "%s/panel/vhost/apache/proxy/%s/%s_%s.conf" % (self.setupPath, get.sitename, proxyname_md5, get.sitename)
         ap_proxydir = "%s/panel/vhost/apache/proxy/%s" % (self.setupPath, get.sitename)
         if not os.path.exists(ap_proxydir):
-            public.ExecShell("mkdir -p %s" % ap_proxydir)
+            public.Mkdir(ap_proxydir, 0o755, "P")
         ap_proxy = ''
         if type == 1:
             ap_proxy += '''#PROXY-START%s
@@ -5463,7 +5578,7 @@ location ^~ %s
             ws = "apache"
         file_path = os.path.join('/www/server/panel/rewrite/', ws, name + '.conf')
         if os.path.exists(file_path):
-            public.ExecShell('rm -rf {}'.format(file_path))
+            public.Rm(file_path)
         else:
             return public.returnMsg(False, '指定模板文件不存在！')
         return public.returnMsg(True, '删除成功！')
@@ -5512,7 +5627,7 @@ location ^~ %s
             os.makedirs(os.path.dirname(zipName))
 
         if not os.path.exists(self.site_backup_log_path):
-            public.ExecShell("mkdir -p {}".format(self.site_backup_log_path))
+            public.Mkdir(self.site_backup_log_path, 0o755, "P")
         tmps = '{}/site_backup_{}.log'.format(self.site_backup_log_path,id)
 
         execStr = "cd '" + find['path'] + "' && tar -zcvf '" + zipName + "' --exclude=.user.ini   ./ > " + tmps + " 2>&1"
@@ -5841,7 +5956,7 @@ location ^~ %s
 
         # 写密码配置
         passDir = public.GetConfigValue('setup_path') + '/pass'
-        if not os.path.exists(passDir): public.ExecShell('mkdir -p ' + passDir)
+        if not os.path.exists(passDir): public.Mkdir(passDir, 0o755, "P")
         public.writeFile(filename, passconf)
         public.serviceReload()
         public.WriteLog("TYPE_SITE", "SITE_AUTH_OPEN_SUCCESS", (get.siteName,))
@@ -5970,7 +6085,7 @@ location ^~ %s
             rep = "\s*#TOMCAT-START(.|\n)+#TOMCAT-END"
             conf = re.sub(rep, '', conf)
             public.writeFile(filename, conf)
-        public.ExecShell('rm -rf ' + self.setupPath + '/panel/vhost/tomcat/' + name)
+        public.Rm(self.setupPath + '/panel/vhost/tomcat/' + name)
         try:
             import tomcat
             tomcat.tomcat().DelVhost(siteName)
@@ -6084,7 +6199,7 @@ location ^~ %s
         d_path = sitePath + get.runPath + "/.user.ini"
         if s_path != d_path:
             public.ExecShell("chattr -i {} {}".format(s_path, d_path))
-            public.ExecShell("mv {} {}".format(s_path, d_path))
+            public.Mv(s_path, d_path)
             public.ExecShell("chattr +i {}".format(d_path))
 
         public.serviceReload()
@@ -6213,7 +6328,7 @@ location ^~ %s
             public.writeFile(path, conf)
 
         path = self.setupPath + '/panel/vhost/nginx/default.conf'
-        if os.path.exists(path): public.ExecShell('rm -f ' + path)
+        if os.path.exists(path): public.Rm(path)
         public.writeFile(default_site_save, get.name)
         public.serviceReload()
         return public.returnMsg(True, 'SET_SUCCESS')
@@ -7902,16 +8017,16 @@ RewriteRule \.(BTPFILE)$    /404.html   [R,NC]
         userIni = self.sitePath + '/.user.ini'
         if not os.path.exists(userIni):
             public.writeFile(userIni, 'open_basedir=' + self.sitePath + '/:/tmp/')
-            public.ExecShell('chmod 644 ' + userIni)
-            public.ExecShell('chown root:root ' + userIni)
+            public.Chmod(userIni, 0o644)
+            public.Chown(userIni, 'root', 'root')
             public.ExecShell('chattr +i ' + userIni)
 
         # 创建默认文档
         index = self.sitePath + '/index.html'
         if not os.path.exists(index) and create_conf["page_index"]:
             public.writeFile(index, public.readFile('data/defaultDoc.html'))
-            public.ExecShell('chmod -R 755 ' + index)
-            public.ExecShell('chown -R www:www ' + index)
+            public.Chmod(index, 0o755)
+            public.Chown(index, 'www', 'www')
 
         # 创建默认404页
         doc404 = self.sitePath + '/404.html'
@@ -7941,8 +8056,8 @@ RewriteRule \.(BTPFILE)$    /404.html   [R,NC]
                     data_404_body = default_404_page_content
 
                 public.WriteFile(doc404, data_404_body)
-                public.ExecShell('chmod -R 755 ' + doc404)
-                public.ExecShell('chown -R www:www ' + doc404)
+                public.Chmod(doc404, 0o755)
+                public.Chown(doc404, 'www', 'www')
         
 
     # def open_cdn_ip(self, get):

@@ -190,6 +190,31 @@ class wordpress_scan:
         return result
 
 
+    def parse_version(self, version):
+        '''
+            @name 解析版本号
+            @param version 版本号
+            @return list|None
+        '''
+        if version is None:
+            return None
+        version = str(version).strip()
+        if not version:
+            return None
+        if version[0] in ("v", "V"):
+            version = version[1:]
+
+        result = []
+        for num in version.split('.'):
+            num = num.strip()
+            if not num:
+                continue
+            match = re.match(r'(\d+)', num)
+            if not match:
+                return None
+            result.append(int(match.group(1)))
+        return result if result else None
+
     def compare_versions(self,version1, version2):
         '''
             @name 对比版本号
@@ -197,9 +222,10 @@ class wordpress_scan:
             @param version2 版本2
             @return int  0 相等 1 大于 -1 小于
         '''
-        # 分割版本号为整数列表
-        v1 = [int(num) for num in version1.split('.')]
-        v2 = [int(num) for num in version2.split('.')]
+        v1 = self.parse_version(version1)
+        v2 = self.parse_version(version2)
+        if v1 is None or v2 is None:
+            return None
         # 逐个比较版本号的每个部分
         for num1, num2 in zip(v1, v2):
             if num1 > num2:
@@ -224,17 +250,21 @@ class wordpress_scan:
             i["vlun_status"] = False
             #如果是小于等于的话
             if i["let"]=="<=":
-                if self.compare_versions(version,i["vlun_version"])<=0:
+                compare_result = self.compare_versions(version,i["vlun_version"])
+                if compare_result is not None and compare_result<=0:
                     i["vlun_status"]=True
             #小于
             if i["let"]=="<":
-                if self.compare_versions(version,i["vlun_version"])<0:
+                compare_result = self.compare_versions(version,i["vlun_version"])
+                if compare_result is not None and compare_result<0:
                     i["vlun_status"]=True
             if i['let']=='-':
                 #从某个版本开始、到某个版本结束
                 version_list=i["vlun_version"].split("-")
                 if len(version_list)!=2:continue
-                if self.compare_versions(version,version_list[0])>=0 and self.compare_versions(version,version_list[1])<=0:
+                start_result = self.compare_versions(version,version_list[0])
+                end_result = self.compare_versions(version,version_list[1])
+                if start_result is not None and end_result is not None and start_result>=0 and end_result<=0:
                     i["vlun_status"]=True
 
         return vlun_infos

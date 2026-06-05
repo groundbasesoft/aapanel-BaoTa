@@ -98,7 +98,7 @@ def pyenv_path() -> str:
 
 class PythonEnvironment:
     """Python环境元数据载体类"""
-    _BT_PROJECT_ENV_SHELL = "/www/server/panel/script/btpyprojectenv.sh"
+    _BT_PROJECT_ENV_SHELL = "/www/server/python_project/btpyprojectenv.sh"
     _bt_etc_pyenv = "/www/server/panel/data/bt_etc_pyenv.sh"
     project_to_pyenv_map_file = "/www/server/panel/data/python_project_name2env.txt"
     default_pip_source = "https://mirrors.aliyun.com/pypi/simple/"

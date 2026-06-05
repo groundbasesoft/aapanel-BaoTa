@@ -7972,7 +7972,26 @@ def check_area_panel():
     # 本地访问直接返回false
     if client_ip in ['127.0.0.1', 'localhost', '::1']: return False
     if is_ipv6(client_ip): return False
-    ip_area_dict = get_ip_location(client_ip)
+    # 保留段地址
+    try:
+        import ipaddress
+        if ipaddress.ip_address(client_ip).is_private:
+            return False
+    except:
+        # 极端情况ip解析异常，直接返回false跳过
+        return False
+    try:
+        # 尝试云端获取
+        import PluginLoader
+        get_obj = to_dict_obj({
+            "model_index": "safe",
+            "ip_address": client_ip
+        })
+        ip_area_dict = PluginLoader.module_run("ips", "get_cloud_ip_location", get_obj)
+    except:
+        ip_area_dict = None
+    if not isinstance(ip_area_dict, dict) or not isinstance(ip_area_dict.get("country", None), dict):
+        ip_area_dict = get_ip_location(client_ip)
     # 没有查询到地区返回false，内网地址直接返回false
     if not ip_area_dict: return False
     if ip_area_dict["country"]["country"] == "内网地址": return False
@@ -9261,3 +9280,140 @@ try:
     del _change_create_connection
 except Exception:
     print_error()
+
+
+
+def get_secret_key():
+    secret_key_file = get_panel_path() + "/data/panel_secret_key.json"
+    if os.path.exists(secret_key_file): 
+        try:
+            data = readFile(secret_key_file)
+            if data:
+                data_dict = json.loads(data)
+                if "secret_key" in data_dict and data_dict["secret_key"]:
+                    return data_dict["secret_key"]
+        except:
+            secret_key = GetRandomString(64)+get_mac_address()
+            writeFile(secret_key_file, json.dumps({"secret_key": secret_key}))
+            return secret_key
+    secret_key = GetRandomString(64)+get_mac_address()
+    writeFile(secret_key_file, json.dumps({"secret_key": secret_key}))
+    return secret_key
+
+
+def Chmod(path,mode,types=None):
+    '''
+        @name 修改文件权限
+        @param path<string> 文件路径
+        @param mode<int> 权限，如755
+        @return bool 是否修改成功
+    '''
+    if not types:
+        os.chmod(path, mode)
+    elif types == "R":
+        for root, dirs, files in os.walk(path):
+            for d in dirs:
+                os.chmod(os.path.join(root, d), mode)
+            for f in files:
+                os.chmod(os.path.join(root, f), mode)
+    else:   
+        return False
+    return True
+
+
+def Chown(path, user, group, types=None):
+    '''
+        @name 修改文件属主
+        @param path<string> 文件路径
+        @param user<string> 用户名
+        @param group<string> 组名
+        @return bool 是否修改成功
+    '''
+    import shutil
+    if not types:
+        shutil.chown(path, user=user, group=group)
+    elif types == "R":
+        for root, dirs, files in os.walk(path):
+            for d in dirs:
+                shutil.chown(os.path.join(root, d), user=user, group=group)
+            for f in files:
+                shutil.chown(os.path.join(root, f), user=user, group=group)
+    else:
+        return False
+    return True
+
+def Rm(path):
+    '''
+        @name 删除文件或目录
+        @param path<string> 文件或目录路径
+        @return bool 是否删除成功
+    '''
+    import shutil
+    if not os.path.exists(path):
+        return False
+    if os.path.isfile(path):
+        os.remove(path)
+    elif os.path.isdir(path):
+        shutil.rmtree(path)
+    return True
+
+def Mkdir(path, mode=0o755, types=None):
+    ''' 
+        @name 创建目录
+        @param path<string> 目录路径
+        @param mode<int> 权限，如755
+        @return bool 是否创建成功
+    '''
+    if not os.path.exists(path):
+        if types == "P":
+            os.makedirs(path, mode=mode, exist_ok=True)
+        else:
+            os.mkdir(path, mode=mode)
+    return True
+
+
+def Mv(src, dst):
+    '''
+        @name 移动文件或目录
+        @param src<string> 源文件或目录路径
+        @param dst<string> 目标文件或目录路径
+        @return bool 是否移动成功
+    '''
+    import shutil
+    if not os.path.exists(src):
+        return False
+    shutil.move(src, dst)
+    return True
+    
+def Cp(src, dst, types=None):
+    '''
+        @name 复制文件或目录
+        @param src<string> 源文件或目录路径
+        @param dst<string> 目标文件或目录路径
+        @return bool 是否复制成功
+    '''
+    import shutil
+    if not os.path.exists(src):
+        return False
+    if os.path.isfile(src):
+        shutil.copy2(src, dst)
+    elif os.path.isdir(src):
+        if types == "R":
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+        else:
+            shutil.copytree(src, dst)
+    return True
+
+def check_password_re(password):
+    '''
+        @name 通用密码安全策略
+        @param password<string> 密码    
+    '''
+    __safe_password_re = re.compile(r'^[A-Za-z0-9@$%^()#%^*_=+\-\.]{6,50}$')
+    if not password:
+        return False
+    if len(password) < 6:
+        return False
+    if not __safe_password_re.match(password):
+        return False
+    return True

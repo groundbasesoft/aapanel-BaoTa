@@ -17,26 +17,19 @@ def _get_skill_doc():
         for s in skills
     ])
 
-    examples = ", ".join([f"'{s.name}'" for s in skills[:3]])
-    hint = f" (e.g., {examples}, ...)" if examples else ""
-
-    return f"""Load a specialized skill that provides domain-specific instructions and workflows.(当用户提到 技能、Skills、Skill时优先告诉用户你拥有以下可用技能)
-
-When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.
-
-The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.
-
-Tool output includes a `<skill_content name="...">` block with the loaded content.
-
-The following skills provide specialized sets of instructions for particular tasks
-Invoke this tool to load a skill when a task matches one of the available skills listed below:
+    return f"""加载一个专用技能，该技能提供特定领域的指令和工作流。
+当用户要求你执行任务时，检查是否有可用技能与之匹配。技能提供专门的能力和领域知识。
+技能将注入详细的指令、工作流以及对捆绑资源（脚本、参考文档、模板）的访问到对话上下文中。
+工具输出包含一个 `<skill_content name="...">` 区块，其中包含加载的内容。
 
 <available_skills>
 {skill_list}
 </available_skills>
 
-Args:
-    name: The name of the skill from available_skills{hint}
+【重要规则】
+1. 主动匹配：如果当前用户请求或上下文涉及以下任何 Skill 的能力范围，请优先调用对应的 Skill 来完成任务。
+2. 避免重复：如果上下文中已有相关 Skill 的调用结果，且当前信息足够完成任务，请不要重复调用同一个 Skill。
+3. 智能判断：仅在确实需要新的 Skill 能力时才调用，不要重复调用已提供过相同或相似信息的 Skill。
 """
 
 
@@ -53,15 +46,20 @@ class Skills:
         return _get_skill_doc()
     
     def __call__(self, name: str):
-        """调用时执行实际的 skill 加载逻辑"""
+        """
+        Load a specialized skill that provides domain-specific instructions and workflows.
+
+        Args:
+            name: The name of the skill from available_skills
+        """
         skill_obj = skill_manager.get_enabled(name)
         
         if not skill_obj:
             target_skill = skill_manager.get(name)
             if target_skill and not skill_manager.is_enabled(name):
-                return _xml_response("error", f"Skill '{name}' is disabled.")
+                return _xml_response("Skills", "error", f"Skill '{name}' is disabled.")
             available = ", ".join([s.name for s in skill_manager.all_enabled()])
-            return _xml_response("error", f"Skill '{name}' not found. Available skills: {available or 'none'}")
+            return _xml_response("Skills", "error", f"Skill '{name}' not found. Available skills: {available or 'none'}")
 
         # 获取文件列表
         skill_dir = os.path.dirname(skill_obj.location)
@@ -84,7 +82,7 @@ class Skills:
             "</skill_content>"
         ]
 
-        return _xml_response("done", "\n".join(output))
+        return _xml_response("Skills", "done", "\n".join(output))
 
 
 # 注册工具

@@ -53,6 +53,6 @@ def check_run():
         not_backups.append(db['name'])
 
     if not_backups:
-        return False, '以下数据库未设置定期备份: <br />' + ('<br />'.join(not_backups))
+        return False, '以下数据库未设置定期备份: <br/>' + ('<br/>'.join(not_backups))
     return True, '无风险'
 

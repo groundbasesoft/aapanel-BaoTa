@@ -275,7 +275,7 @@ class main(Base):
                 if addr.family == socket.AF_INET:  # IPv4
                     p_ip = public.ExecShell("curl --interface {} https://www.bt.cn/api/getIpAddress --connect-timeout 3 -m 3".format(addr.address))
                     if not p_ip[0]:
-                        p_ip = addr.address
+                        p_ip[0] = addr.address
 
                     ip_info.append({
                         "type": "IPv4",
@@ -289,7 +289,7 @@ class main(Base):
                         continue
                     p_ip = public.ExecShell("curl -6 --interface {} https://www.bt.cn/api/getIpAddress --connect-timeout 3 -m 3".format(addr.address))
                     if not p_ip[0]:
-                        p_ip = addr.address
+                        p_ip[0] = addr.address
 
                     ip_info.append({
                         "type": "IPv6",

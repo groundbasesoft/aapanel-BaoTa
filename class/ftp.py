@@ -96,8 +96,18 @@ class ftp:
             get.path = get['path'].strip()
             get.path = get.path.replace("\\", "/")
             fileObj.CreateDir(get)
-            public.ExecShell('chown www.www ' + get.path)
-            command = 'echo -e "{}\n{}\n" | {}/pure-pw useradd "{}" -u www -d {}'.format(password,password,self.__runPath,username,get["path"])
+            public.Chown(get.path,'www','www')
+            if not os.path.exists(get.path):
+                return public.returnMsg(False, 'FTP_USERNAME_ERR_DIR')
+            if not os.path.isdir(get.path):
+                return public.returnMsg(False, 'FTP_USERNAME_ERR_DIR')
+            path=os.path.abspath(get.path)
+            if not public.path_safe_check(path):
+                return public.returnMsg(False, '目录名称包含敏感字符，请重新选择目录！')
+            #密码为A-Z，a-z，0-9的组合，且长度为6-20位
+            if not re.match(r'^[A-Za-z0-9]{6,20}$', password):
+                return public.returnMsg(False, 'FTP密码必须为6-20位的字母和数字组合！不能包含特殊字符！')
+            command = 'echo -e "{}\n{}\n" | {}/pure-pw useradd "{}" -u www -d {}'.format(password,password,self.__runPath,username,path)
             result = subprocess.run(command, shell=True, text=True, capture_output=True)
             if result.returncode != 0:
                 return public.returnMsg(False, '执行命令添加用户失败: {}'.format(result.stderr))
@@ -175,6 +185,8 @@ class ftp:
         try:
             username = get['username']
             id = get['id']
+            if not re.match(r'^[A-Za-z0-9_]{3,20}$', username):
+                return public.returnMsg(False, 'FTP用户名必须为3-20位的字母、数字或下划线组合！不能包含特殊字符！')
             query=public.M('ftps').where("id=? and name=?", (id, username,))
             path=query.getField('path')
             self.removeFTPAlerts(path)
@@ -197,6 +209,10 @@ class ftp:
             id = get['id']
             username = get['ftp_username'].strip()
             password = get['new_password'].strip()
+            if not re.match(r'^[A-Za-z0-9]{6,20}$', password):
+                return public.returnMsg(False, 'FTP密码必须为6-20位的字母和数字组合！不能包含特殊字符！')
+            if not re.match(r'^[A-Za-z0-9_]{3,20}$', username):
+                return public.returnMsg(False, 'FTP用户名必须为3-20位的字母、数字或下划线组合！不能包含特殊字符！')
             if public.M('ftps').where("id=? and name=?", (id, username,)).count() == 0:
                 return public.returnMsg(False, 'DEL_ERROR')
             if len(password) < 6:
@@ -219,7 +235,13 @@ class ftp:
             username = get['ftp_username'].strip()
             password = get['new_password'].strip()
             path = get['path'].strip().replace("\\", "/")
-            
+            path=os.path.abspath(get.path)
+            if not public.path_safe_check(path):
+                return public.returnMsg(False, '目录名称包含敏感字符，请重新选择目录！')
+            if not re.match(r'^[A-Za-z0-9]{6,20}$', password):
+                return public.returnMsg(False, 'FTP密码必须为6-20位的字母和数字组合！不能包含特殊字符！')
+            if not re.match(r'^[A-Za-z0-9_]{3,20}$', username):
+                return public.returnMsg(False, 'FTP用户名必须为3-20位的字母、数字或下划线组合！不能包含特殊字符！')
             if public.M('ftps').where("id=? and name=?", (id, username)).count() == 0:
                 return public.returnMsg(False, 'DEL_ERROR')
             
@@ -262,8 +284,10 @@ class ftp:
                     password = i['new_password'].strip()
                     if public.M('ftps').where("id=? and name=?", (id, username,)).count() == 0:
                         return public.returnMsg(False, 'DEL_ERROR')
-                    if len(password) < 6:
-                        return public.returnMsg(False, 'FTP密码长度不能少于6位!')
+                    if not re.match(r'^[A-Za-z0-9]{6,20}$', password):
+                        return public.returnMsg(False, 'FTP密码必须为6-20位的字母和数字组合！不能包含特殊字符！')
+                    if not re.match(r'^[A-Za-z0-9_]{3,20}$', username):
+                        return public.returnMsg(False, 'FTP用户名必须为3-20位的字母、数字或下划线组合！不能包含特殊字符！')
                     public.ExecShell(self.__runPath + '/pure-pw passwd "' + username +
                                      '"<<EOF \n' + password + '\n' + password +
                                      '\nEOF')
@@ -285,6 +309,8 @@ class ftp:
             id = get['id']
             username = get['username']
             status = get['status']
+            if not re.match(r'^[A-Za-z0-9_]{3,20}$', username):
+                return public.returnMsg(False, 'FTP用户名必须为3-20位的字母、数字或下划线组合！不能包含特殊字符！')
             if public.M('ftps').where("id=? and name=?", (id, username,)).count() == 0:
                 return public.returnMsg(False, 'DEL_ERROR')
             if int(status) == 0:
@@ -541,6 +567,8 @@ class ftp:
     def GetFtpUserAccess(self, get):
         try:
             username = get['username']
+            if not re.match(r'^[A-Za-z0-9_]{3,20}$', username):
+                return public.returnMsg(False, 'FTP用户名必须为3-20位的字母、数字或下划线组合！不能包含特殊字符！')
             cmd = self.__runPath + '/pure-pw show "' + username + '"'
             try:
                 result = subprocess.check_output(cmd, shell=True, text=True)
@@ -597,6 +625,8 @@ class ftp:
         
         try:
             username = get['username']
+            if not re.match(r'^[A-Za-z0-9_]{3,20}$', username):
+                return public.returnMsg(False, 'FTP用户名必须为3-20位的字母、数字或下划线组合！不能包含特殊字符！')
             # 构建修改用户权限的命令
             cmd = self.__runPath + f'/pure-pw usermod "{username}"'           
             # 解析用户提交的权限参数

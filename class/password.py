@@ -20,6 +20,9 @@ import re
 import public,data,database,config
 
 class password:
+    __safe_password_re = re.compile(r'^[A-Za-z0-9@$%^()#%^*_=+\-\.]{8,50}$')
+    __safe_user_re = re.compile(r'^[A-Za-z0-9]{2,20}$')
+
     def __init__(self):
         self.__data=data.data()
         self.__database=database.database()
@@ -42,6 +45,10 @@ class password:
 
     # 设置root 密码
     def set_root_password(self,get):
+        if not self.__safe_password_re.match(get.password):
+            return public.returnMsg(False, '密码必须包含数字和字母，长度8-50位')
+        if not self.__safe_user_re.match(get.user):
+            return public.returnMsg(False, '用户名必须为2-20位字母或数字')
         public.ExecShell("echo "+get.user+":"+get.password+"|chpasswd")
         return True
 
@@ -53,6 +60,8 @@ class password:
     #设置mysql_root 密码
     def set_mysql_password(self,get):
         if 'password' in  get:
+            if not self.__safe_password_re.match(get.password):
+                return public.returnMsg(False, '密码必须为8-50位，仅支持字母、数字和 @#%^*_-+=')
             resutl=self.__database.SetupPassword(get)
             return resutl
         else:
@@ -71,6 +80,8 @@ class password:
         参数 三个
         id 数据库ID， name:数据库名称, password:数据库密码
         '''
+        if not self.__safe_password_re.match(get.password):
+            return public.returnMsg(False, '密码必须为8-50位，仅支持字母、数字和 @#%^*_-+=')
         data=self.__database.ResDatabasePassword(get)
         return data
 

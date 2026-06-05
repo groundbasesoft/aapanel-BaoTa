@@ -78,14 +78,16 @@ class SecureManage(SSHbase):
         # (ls -tr /var/log/secure | grep -v '\.gz$' | xargs cat | grep -aE '(Failed password|Accepted)') | tee >(wc -l) >(tail -n 20 | head -n 10 | tac) > /dev/null
         # """
         # result, err = public.ExecShell(commands)
-
+        start = (page - 1) * pagesize + 1
+        end = page * pagesize
         #利用标准输出和标准错误输出同时获取2组结果
-        commands = "ls -tr {file_path}|grep -v '\.gz$'|xargs cat|grep -aE '({login_type})'{query}| tee >(tail -n {end}|head -n {pagesize}|tac >&2)|wc -l".format(
-        file_path=self.ssh_log_path,
-        login_type=login_type,
-        query=query,
-        end=end,
-        pagesize=pagesize)
+        commands = "ls -tr {file_path}|grep -v '\.gz$'|xargs cat|grep -aE '({login_type})'{query}| tee >(tac | sed -n '{start},{end}p' >&2)|wc -l".format(
+            file_path=self.ssh_log_path,
+            login_type=login_type,
+            query=query,
+            start=start,
+            end=end
+        )
         count,datas = self.execshell(commands)
 
         year = datetime.now().year

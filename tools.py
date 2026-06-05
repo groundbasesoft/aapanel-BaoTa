@@ -868,7 +868,13 @@ def get_temp_login_ipv4():
         else:
             HTTP_C="http://"
 
-        IP_ADDRES=public.ExecShell("curl -4 -sS --connect-timeout 10 -m 20 {}".format(public.get_home_node("https://www.bt.cn/Api/getIpAddress")))[0]
+        o = public.readFile("/www/server/panel/data/o.pl")
+        if o == "tencent":
+            url = "http://metadata.tencentyun.com/latest/meta-data/public-ipv4"
+        else:
+            url = public.get_home_node("https://www.bt.cn/Api/getIpAddress")
+
+        IP_ADDRES=public.ExecShell("curl -4 -sS --connect-timeout 10 -m 20 {}".format(url))[0]
 
         PANEL_PORT=public.readFile("/www/server/panel/data/port.pl")
 

@@ -125,7 +125,7 @@ def WebFetch(url: str, format: str = "markdown", timeout: Optional[int] = None, 
     
     # Validate URL
     if not url.startswith("http://") and not url.startswith("https://"):
-        return _xml_response("error", "URL must start with http:// or https://")
+        return _xml_response("WebFetch", "error", "URL must start with http:// or https://")
     
     # Set timeout
     request_timeout = DEFAULT_TIMEOUT
@@ -156,19 +156,19 @@ def WebFetch(url: str, format: str = "markdown", timeout: Optional[int] = None, 
         #      response = requests.get(url, headers=headers, timeout=request_timeout, stream=True)
         
         if not response.ok:
-            return _xml_response("error", f"Request failed with status code: {response.status_code}")
+            return _xml_response("WebFetch", "error", f"Request failed with status code: {response.status_code}")
         
         # Check size limit
         content_length = response.headers.get("content-length")
         if content_length and int(content_length) > MAX_RESPONSE_SIZE:
-             return _xml_response("error", "Response too large (exceeds 5MB limit)")
+             return _xml_response("WebFetch", "error", "Response too large (exceeds 5MB limit)")
         
         # Read content with size limit
         content = b""
         for chunk in response.iter_content(chunk_size=8192):
             content += chunk
             if len(content) > MAX_RESPONSE_SIZE:
-                return _xml_response("error", "Response too large (exceeds 5MB limit)")
+                return _xml_response("WebFetch", "error", "Response too large (exceeds 5MB limit)")
         
         content_type = response.headers.get("content-type", "").lower()
         
@@ -189,7 +189,7 @@ def WebFetch(url: str, format: str = "markdown", timeout: Optional[int] = None, 
             }
             # For XML serialization of tool result
             import json
-            return _xml_response("done", json.dumps(output, ensure_ascii=False))
+            return _xml_response("WebFetch", "done", json.dumps(output, ensure_ascii=False))
 
         # Text decoding
         encoding = response.encoding
@@ -239,11 +239,11 @@ def WebFetch(url: str, format: str = "markdown", timeout: Optional[int] = None, 
         else: # html or raw
             result_output = text_content
 
-        return _xml_response("done", result_output)
+        return _xml_response("WebFetch", "done", result_output)
 
     except requests.Timeout:
-        return _xml_response("error", "Request timed out")
+        return _xml_response("WebFetch", "error", "Request timed out")
     except requests.RequestException as e:
-        return _xml_response("error", f"Request failed: {str(e)}")
+        return _xml_response("WebFetch", "error", f"Request failed: {str(e)}")
     except Exception as e:
-        return _xml_response("error", f"An error occurred: {str(e)}")
+        return _xml_response("WebFetch", "error", f"An error occurred: {str(e)}")

@@ -21,6 +21,7 @@ from datetime import datetime
 
 class ssh_security:
     __type_list = ['ed25519', 'ecdsa', 'rsa', 'dsa']
+    __safe_password_re = re.compile(r'^[A-Za-z0-9@$%^()#%^*_=+\-\.]{8,50}$')
     __key_type_file = '{}/data/ssh_key_type.pl'.format(public.get_panel_path())
     __key_files = ['/root/.ssh/id_ed25519', '/root/.ssh/id_ecdsa', '/root/.ssh/id_rsa', '/root/.ssh/id_rsa_bt']
     __type_files = {
@@ -433,11 +434,11 @@ disown $!''' % (self.return_python())
         if len(password) < 8: return public.returnMsg(False, "密码长度不能小于8位")
         if get.username not in self.get_sys_user(get)['msg']:
             return public.returnMsg(False, '用户名已存在')
-
-        has_letter = bool(re.search(r'[a-zA-Z!@#$%^&*()-_+=]', password))
-        has_digit_or_symbol = bool(re.search(r'[0-9!@#$%^&*()-_+=]', password))
-        if not has_letter or not has_digit_or_symbol: return public.returnMsg(False, "密码必须包含字母和数字或符号")
-
+        if not self.__safe_password_re.match(password):
+            return public.returnMsg(False, '密码必须为8-50位，仅支持字母、数字和 @#%^*_-+=')
+        
+        if not re.match(r'^[A-Za-z0-9]{2,20}$', username):
+            return public.returnMsg(False, '用户名必须为2-20位的字母和数字组合！不能包含特殊字符！')
         if username == "root":
             cmd_result, cmd_err = public.ExecShell("echo root:%s|chpasswd" % password)
             if cmd_err:
@@ -777,17 +778,14 @@ disown $!''' % (self.return_python())
                     task_data = task
                     sender_types = set()  # 使用集合来保证类型的唯一性
                     
-                    # 对应sender的ID，获取sender_type，并保证唯一性
                     for sender_id in task.get('sender', []):
                         if sender_id in sender_dict:
                             sender_types.add(sender_dict[sender_id]['sender_type'])
                     
-                    # 将唯一的通道类型列表转回列表格式，添加到告警数据中
                     task_data['channels'] = list(sender_types)
                     break
 
         except Exception as e:
-            # print(f"处理文件或解析数据时发生错误: {e}")
             return result
         if task_data:
             return task_data
@@ -798,31 +796,6 @@ disown $!''' % (self.return_python())
     def GetSshInfo(self):
         status = public.get_sshd_status()
         return status
-        # pid_file = '/run/sshd.pid'
-        # if os.path.exists(pid_file):
-        #     pid = int(public.readFile(pid_file))
-        #     status = public.pid_exists(pid)
-        # else:
-        #     import system
-        #     panelsys = system.system()
-        #     version = panelsys.GetSystemVersion()
-        #     if os.path.exists('/usr/bin/apt-get'):
-        #         if os.path.exists('/etc/init.d/sshd'):
-        #             status = public.ExecShell("service sshd status | grep -P '(dead|stop)'|grep -v grep")
-        #         else:
-        #             status = public.ExecShell("service ssh status | grep -P '(dead|stop)'|grep -v grep")
-        #     else:
-        #         if version.find(' 7.') != -1 or version.find(' 8.') != -1 or version.find('Fedora') != -1:
-        #             status = public.ExecShell("systemctl status sshd.service | grep 'dead'|grep -v grep")
-        #         else:
-        #             status = public.ExecShell("/etc/init.d/sshd status | grep -e 'stopped' -e '已停'|grep -v grep")
-        #
-        #     #       return status;
-        #     if len(status[0]) > 3:
-        #         status = False
-        #     else:
-        #         status = True
-        # return status
 
     def stop_key(self, get):
         '''
@@ -852,43 +825,22 @@ disown $!''' % (self.return_python())
         result = {}
         file = public.readFile(self.__SSH_CONFIG)
         if not file: return public.returnMsg(False, '错误：sshd_config配置文件不存在，无法继续!')
-
-        # ========   以下在2022-10-12重构  ==========
-        # author : hwliang
-        # 是否开启RSA公钥认证
-        # 默认开启(最新版openssh已经不支持RSA公钥认证)
-        # yes = 开启
-        # no = 关闭
         result['rsa_auth'] = 'yes'
         rec = r'^\s*RSAAuthentication\s*(yes|no)'
         rsa_find = re.findall(rec, file, re.M | re.I)
         if rsa_find and rsa_find[0].lower() == 'no': result['rsa_auth'] = 'no'
 
-        # 获取是否开启公钥认证
-        # 默认关闭
-        # yes = 开启
-        # no = 关闭
         result['pubkey'] = 'no'
         if self.get_key(get)['msg']:  # 先检查是否存在可用的公钥
             pubkey = r'^\s*PubkeyAuthentication\s*(yes|no)'
             pubkey_find = re.findall(pubkey, file, re.M | re.I)
             if pubkey_find and pubkey_find[0].lower() == 'yes': result['pubkey'] = 'yes'
 
-        # 是否开启密码登录
-        # 默认开启
-        # yes = 开启
-        # no = 关闭
         result['password'] = 'yes'
         ssh_password = r'^\s*PasswordAuthentication\s*([\w\-]+)'
         ssh_password_find = re.findall(ssh_password, file, re.M | re.I)
         if ssh_password_find and ssh_password_find[0].lower() == 'no': result['password'] = 'no'
 
-        # 是否允许root登录
-        # 默认允许
-        # yes = 允许
-        # no = 不允许
-        # without-password = 允许，但不允许使用密码登录
-        # forced-commands-only = 允许，但只允许执行命令，不能使用终端
         can_login, login_type = self.paser_root_login(file)
         result['root_is_login'] = can_login
         result['root_login_type'] = login_type
@@ -906,15 +858,6 @@ disown $!''' % (self.return_python())
             p_type = get.p_type.strip()
         if p_type not in self.__root_login_types.keys():
             return public.returnMsg(False, '错误：参数传递错误!')
-        # ssh_password = r'^\s*#?\s*PermitRootLogin\s*([\w\-]+)'
-        # file = public.readFile(self.__SSH_CONFIG)
-        # src_line = re.search(ssh_password, file, re.M)
-        # new_line = 'PermitRootLogin {}'.format(p_type)
-        # if not src_line:
-        #     file_result = file + '\n{}'.format(new_line)
-        # else:
-        #     file_result = file.replace(src_line.group(), new_line)
-        # self.wirte(self.__SSH_CONFIG, file_result)
         file = public.readFile(self.__SSH_CONFIG)
         if not file:
             return public.returnMsg(False, '错误：sshd_config配置文件不存在，无法继续!')
@@ -1189,31 +1132,11 @@ disown $!''' % (self.return_python())
         @param:
         @return
         """
-        # p = int(get.p) if hasattr(get, 'p') else 1
-        # row = int(get.row) if hasattr(get, 'row') else 10
         from collections import deque
         user_set = deque()
         with open('/etc/passwd') as fp:
             for line in fp.readlines():
-                # i = line.strip().split(":")
-                # if i[2] == '0' and i[3] == '0':
-                #     user_set.append(line.split(':', 1)[0]+"*")
-                # else:
                 user_set.append(line.split(':', 1)[0])
-
-        # user_set = []
-        # for line in fp.readlines():
-        #     line = line.strip()
-        #     if line.endswith(':0:0'):
-        #         user_set.append(line.split(':', 1)[0] + '*')
-        #     else:
-        #         user_set.append(line.split(':', 1)[0])
-
-        # count = len(user_set)
-        # data = public.get_page(count, p, row)
-        # return data
-        # return public.returnMsg(True, list(user_set))
-        # public.print_log(public.ExecShell("cat /etc/passwd | grep '^0' "))
         return public.returnMsg(True, list(user_set))
 
     def add_sys_user(self, get):
@@ -1231,14 +1154,13 @@ disown $!''' % (self.return_python())
 
         if len(password) < 8: return public.returnMsg(False, "密码长度不能小于8位")
 
-        has_letter = bool(re.search(r'[a-zA-Z!@#$%^&*()-_+=]', password))
-        has_digit_or_symbol = bool(re.search(r'[0-9!@#$%^&*()-_+=]', password))
-        if not has_letter or not has_digit_or_symbol: return public.returnMsg(False, "密码必须包含字母和数字或符号")
 
-        # 检查用户名是否合法
-        if not re.match(r'^[a-z_][a-z0-9_-]{0,31}$', get.username):
-            return public.returnMsg(False,
-                                    "用户名不合法，必须以小写字母或下划线开头，并且只能包含小写字母、数字、下划线和连字符，且长度在1到32字符之间")
+        if not self.__safe_password_re.match(password):
+            return public.returnMsg(False, '密码必须为8-50位，仅支持字母、数字和 @#%^*_-+=')
+
+        if not re.match(r'^[A-Za-z0-9]{2,20}$', get.username):
+            return public.returnMsg(False, '用户名必须为2-20位的字母和数字组合！不能包含特殊字符！')
+
 
         public.ExecShell('useradd -m -s /bin/bash ' + get.username)
         public.ExecShell('echo ' + get.username + ':' + get.password + ' | chpasswd')
@@ -1254,20 +1176,12 @@ disown $!''' % (self.return_python())
                 return public.returnMsg(False, '用户名不能为空')
             if get.username not in self.get_sys_user(get)['msg']:
                 return public.returnMsg(False, '用户不存在')
-
+            if not re.match(r'^[A-Za-z0-9]{2,20}$', get.username):
+                return public.returnMsg(False, '用户名必须为2-20位的字母和数字组合！不能包含特殊字符！')
             public.ExecShell('userdel -rf ' + get.username)
-
-        # if len(data[1]) > 0:
-        #     match = re.search(r'process (\d+)', data[1])
-        #
-        #     public.ExecShell('kill -9  ' + match.group(1))
-        #     public.ExecShell('userdel -r ' + get.username)
-
             return public.returnMsg(True, '删除成功')
-
         except Exception as e:
-            return
-            # return public.returnMsg(False, '删除失败')
+            return public.returnMsg(False, '删除失败')
 
     @staticmethod
     def is_redhat():
@@ -1359,39 +1273,6 @@ disown $!''' % (self.return_python())
         public.writeFile(last_load_file, new_conf)
         return True, ""
 
-
-# # 指定账号登录发送告警
-# def set_user_send(self,get):
-#     """设置用户发送"""
-#     usernames = get["name"].split(',')
-#     user_send_path = os.path.join(public.get_panel_path(), "data/user_send.json")
-#     if not usernames:
-#         return public.returnMsg(False, '用户名不能为空')
-#
-#     if not os.path.exists(user_send_path):
-#         public.writeFile(user_send_path, '[]')
-#
-#     data = json.loads(public.readFile(user_send_path))
-#
-#     for temp in usernames:
-#         if temp not in data:
-#             data.append(temp)
-#
-#     public.writeFile(user_send_path, json.dumps(data))
-#
-#     return public.returnMsg(True, '设置成功')
-#
-# # 获取需要告警的账号列表
-# def get_user_send(self,get):
-#     """获取需要告警的账号列表"""
-#     user_send_path = os.path.join(public.get_panel_path(), "data/user_send.json")
-#
-#     if not os.path.exists(user_send_path):
-#         return []
-#
-#     data = json.loads(public.readFile(user_send_path))
-#
-#     return data
 
 
 if __name__ == '__main__':

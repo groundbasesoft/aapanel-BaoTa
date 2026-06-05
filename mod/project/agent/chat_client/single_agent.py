@@ -7,6 +7,7 @@
 import json
 from typing import Dict, Any, List, Union, Optional
 import openai
+import public
 
 
 class SingleAgent:
@@ -32,7 +33,7 @@ class SingleAgent:
         """
         
         self.api_key = api_key
-        self.base_url = base_url
+        self.base_url = public.get_home_node(base_url) if base_url and 'bt.cn' in base_url else base_url
         self.model_name = model_name
         self.default_headers = default_headers or {}
         self.temperature = temperature
@@ -57,6 +58,8 @@ class SingleAgent:
         json_schema: Optional[Dict[str, Any]] = None,
         temperature: Optional[float] = None,
         model: Optional[str] = None,
+        stream: bool = False,
+        thinking: bool = False,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -86,6 +89,8 @@ class SingleAgent:
             json_schema: JSON 响应格式定义（可选）
             temperature: 覆盖默认 temperature
             model: 覆盖默认 model
+            stream: 是否使用流式响应（默认 False）
+            thinking: 是否启用思考模式（默认 False）
             **kwargs: 其他 OpenAI API 参数
 
         Returns:
@@ -136,6 +141,19 @@ class SingleAgent:
                 **kwargs
             }
 
+            # 确保 extra_body 存在
+            if "extra_body" not in params:
+                params["extra_body"] = {}
+
+            # 处理 thinking 参数（根据模型类型使用不同格式）
+            if "qwen" in str(self.model_name).lower() or "default" in str(self.model_name).lower():
+                params["extra_body"]["enable_thinking"] = thinking
+            elif "doubao" in str(self.model_name).lower():
+                enable_type = "enabled" if thinking else "disabled"
+                params["extra_body"]["thinking"] = {
+                    "type": enable_type
+                }
+
             # 处理 JSON 响应
             if json_response or json_schema:
                 if json_schema:
@@ -143,50 +161,11 @@ class SingleAgent:
                 else:
                     params["response_format"] = {"type": "json_object"}
 
-            # 调用 API（非流式）
-            response = self.client.chat.completions.create(**params)
-
-            # 提取响应内容
-            if not response.choices:
-                return {
-                    "success": False,
-                    "error": "API 返回空响应"
-                }
-
-            content = response.choices[0].message.content
-
-            # 获取 usage 信息
-            usage = None
-            if response.usage:
-                usage = {
-                    "total_tokens": response.usage.total_tokens,
-                    "input_tokens": response.usage.prompt_tokens,
-                    "output_tokens": response.usage.completion_tokens
-                }
-
-            # 处理响应
-            if json_response or json_schema:
-                try:
-                    data = json.loads(content)
-                    return {
-                        "success": True,
-                        "data": data,
-                        "response": content,
-                        "usage": usage
-                    }
-                except json.JSONDecodeError as e:
-                    return {
-                        "success": False,
-                        "error": f"JSON 解析失败: {str(e)}",
-                        "response": content,
-                        "usage": usage
-                    }
+            # 调用 API
+            if stream:
+                return self._stream_chat_completion(params, json_response, json_schema)
             else:
-                return {
-                    "success": True,
-                    "response": content,
-                    "usage": usage
-                }
+                return self._non_stream_chat_completion(params, json_response, json_schema)
 
         except openai.AuthenticationError:
             return {
@@ -213,6 +192,115 @@ class SingleAgent:
                 "success": False,
                 "error": f"未知错误: {str(e)}"
             }
+
+    def _non_stream_chat_completion(self, params, json_response, json_schema):
+        """非流式聊天完成"""
+        response = self.client.chat.completions.create(**params)
+
+        if not response.choices:
+            return {
+                "success": False,
+                "error": "API 返回空响应"
+            }
+
+        content = response.choices[0].message.content
+
+        usage = None
+        if response.usage:
+            usage = {
+                "total_tokens": response.usage.total_tokens,
+                "input_tokens": response.usage.prompt_tokens,
+                "output_tokens": response.usage.completion_tokens
+            }
+
+        if json_response or json_schema:
+            try:
+                data = json.loads(content)
+                return {
+                    "success": True,
+                    "data": data,
+                    "response": content,
+                    "usage": usage
+                }
+            except json.JSONDecodeError as e:
+                return {
+                    "success": False,
+                    "error": f"JSON 解析失败: {str(e)}",
+                    "response": content,
+                    "usage": usage
+                }
+        else:
+            return {
+                "success": True,
+                "response": content,
+                "usage": usage
+            }
+
+    def _stream_chat_completion(self, params, json_response, json_schema):
+        """流式聊天完成，返回生成器"""
+        params["stream"] = True
+        response = self.client.chat.completions.create(**params)
+
+        full_content = ""
+        full_reasoning = ""
+        usage = None
+
+        for chunk in response:
+            if chunk.choices:
+                delta = chunk.choices[0].delta
+                
+                # 处理 reasoning_content（思考过程）
+                if hasattr(delta, 'reasoning_content') and delta.reasoning_content:
+                    full_reasoning += delta.reasoning_content
+                    yield {
+                        "type": "reasoning",
+                        "response": delta.reasoning_content,
+                        "success": True
+                    }
+                
+                # 处理 content（正式回复）
+                if delta.content:
+                    full_content += delta.content
+                    yield {
+                        "type": "content",
+                        "response": delta.content,
+                        "success": True
+                    }
+
+            if chunk.usage:
+                usage = {
+                    "total_tokens": chunk.usage.total_tokens,
+                    "input_tokens": chunk.usage.prompt_tokens,
+                    "output_tokens": chunk.usage.completion_tokens
+                }
+
+        if json_response or json_schema:
+            try:
+                data = json.loads(full_content)
+                yield {
+                    "type": "message_end",
+                    "success": True,
+                    "data": data,
+                    "response": full_content,
+                    "usage": usage
+                }
+            except json.JSONDecodeError as e:
+                yield {
+                    "type": "error",
+                    "success": False,
+                    "error": f"JSON 解析失败: {str(e)}",
+                    "response": full_content,
+                    "usage": usage
+                }
+        else:
+            yield {
+                "type": "message_end",
+                "success": True,
+                "response": full_content,
+                "reasoning": full_reasoning if full_reasoning else None,
+                "usage": usage
+            }
+
 
     def generate_title(self, user_input: str, prompt: Optional[str] = None) -> Dict[str, Any]:
         """

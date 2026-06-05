@@ -3398,15 +3398,16 @@ make
             self.project_add_domain(get)
         self.set_config(get.project_name)
         # 设置java启动目录为某个用户权限
-        public.ExecShell("chown {}:{} {}".format(get.run_user.strip(), get.run_user.strip(), project_path))
+        #public.ExecShell("chown {}:{} {}".format(get.run_user.strip(), get.run_user.strip(), project_path))
+        public.Chown(project_path,get.run_user.strip(), get.run_user.strip())
         if get.is_separation:
             if not os.path.exists(get.static_path):
-                public.ExecShell("mkdir -p {}".format(get.static_path))
-                public.ExecShell("chown {}:{} {}".format(get.run_user.strip(), get.run_user.strip(), get.static_path))
+                #public.ExecShell("mkdir -p {}".format(get.static_path))
+                public.Mkdir(get.static_path,0o755,"P")
+                #public.ExecShell("chown {}:{} {}".format(get.run_user.strip(), get.run_user.strip(), get.static_path))
+                public.Chown(get.static_path,get.run_user.strip(), get.run_user.strip())
             else:
-                public.ExecShell(
-                    "chown -R {}:{} {}".format(get.run_user.strip(), get.run_user.strip(), get.static_path)
-                    )
+                public.Chown(get.static_path,get.run_user.strip(), get.run_user.strip(),"R")
         
         public.WriteLog(self._log_name, '添加Java Springboot项目{}'.format(get.project_name))
         self.start_project(get)
@@ -4435,7 +4436,8 @@ make
             ret = json.loads(public.ReadFile(self._springoot_dump + '/' + get.project_name + '.json'))
             if get.dump_name.strip() in ret:
                 ret.remove(get.dump_name.strip())
-                public.ExecShell("rm -rf %s" % get.dump_name.strip())
+                #public.ExecShell("rm -rf %s" % get.dump_name.strip())
+                public.Rm(get.dump_name.strip())
             return public.returnMsg(True, '删除成功')
         except:
             public.WriteFile(public.ReadFile(self._springoot_dump + '/' + get.project_name + '.json'), [])
